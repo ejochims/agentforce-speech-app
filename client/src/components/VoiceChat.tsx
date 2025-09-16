@@ -443,39 +443,6 @@ export default function VoiceChat() {
         </div>
       )}
 
-      {/* Bottom Action Buttons */}
-      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2">
-        <div className="flex items-center gap-4">
-          <Button
-            size="icon"
-            variant="destructive"
-            className="w-12 h-12 rounded-full"
-            data-testid="button-end-call"
-            onClick={() => console.log('End call clicked')}
-          >
-            <Phone className="w-5 h-5" />
-          </Button>
-
-          <Button
-            size="icon"
-            variant="secondary"
-            className="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
-            data-testid="button-mute"
-            onClick={() => console.log('Mute clicked')}
-          >
-            <Mic className="w-5 h-5" />
-          </Button>
-
-          <Button
-            size="icon"
-            className="w-12 h-12 rounded-full"
-            data-testid="button-more"
-            onClick={() => console.log('More options clicked')}
-          >
-            <Download className="w-5 h-5" />
-          </Button>
-        </div>
-      </div>
 
       {/* Bottom Tab Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border">
