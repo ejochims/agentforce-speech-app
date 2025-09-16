@@ -15,8 +15,11 @@ export default function VoiceRecordButton({
 }: VoiceRecordButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
+  const startTimeRef = useRef<number>(0);
+  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startRecording = async () => {
     try {
@@ -56,6 +59,15 @@ export default function VoiceRecordButton({
       recorder.start(100); // Record in 100ms chunks for better data capture
       mediaRecorder.current = recorder;
       setIsRecording(true);
+      setRecordingDuration(0);
+      startTimeRef.current = Date.now();
+      
+      // Start duration counter
+      durationIntervalRef.current = setInterval(() => {
+        const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setRecordingDuration(duration);
+      }, 100);
+      
       onRecordingStart?.();
       console.log('Recording started successfully');
     } catch (error) {
@@ -67,8 +79,23 @@ export default function VoiceRecordButton({
 
   const stopRecording = () => {
     if (mediaRecorder.current && isRecording) {
+      const recordingTime = Date.now() - startTimeRef.current;
+      console.log(`Stopping recording after ${recordingTime}ms...`);
+      
+      // Clear duration interval
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+      
+      // Check if recording is too short
+      if (recordingTime < 500) { // Less than 0.5 seconds
+        console.warn('Recording too short, may not contain audio data');
+      }
+      
       mediaRecorder.current.stop();
       setIsRecording(false);
+      setRecordingDuration(0);
       console.log('Recording stopped');
     }
   };
@@ -128,7 +155,10 @@ export default function VoiceRecordButton({
       </Button>
       
       <p className="text-sm text-muted-foreground font-medium">
-        {isRecording ? 'Release to stop' : 'Hold to speak'}
+        {isRecording 
+          ? `Recording... ${recordingDuration}s ${recordingDuration < 1 ? '(hold longer)' : ''}` 
+          : 'Hold to speak (at least 1 second)'
+        }
       </p>
     </div>
   );

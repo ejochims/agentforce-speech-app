@@ -116,9 +116,16 @@ export default function VoiceChat() {
 
   const handleRecordingStop = async (audioBlob?: Blob) => {
     setIsRecording(false);
-    console.log('Voice recording stopped', audioBlob);
+    console.log('Voice recording stopped', audioBlob?.size, 'bytes');
     
     if (!audioBlob || !currentConversationId) return;
+    
+    // Check if audio blob has data
+    if (audioBlob.size === 0 || audioBlob.size < 100) {
+      console.error('Audio recording is empty or too small:', audioBlob.size, 'bytes');
+      alert('Recording too short or empty. Please hold the button longer and speak clearly.');
+      return;
+    }
 
     setIsProcessing(true);
     try {
