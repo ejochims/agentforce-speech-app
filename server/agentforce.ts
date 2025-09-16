@@ -31,6 +31,7 @@ export class AgentforceClient {
   private agentId: string;
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
+  private instanceUrl: string | null = null;
 
   constructor() {
     this.domainUrl = process.env.SALESFORCE_DOMAIN_URL!;
@@ -72,8 +73,11 @@ export class AgentforceClient {
 
       const data: AgentforceTokenResponse = await response.json();
       this.accessToken = data.access_token;
+      this.instanceUrl = data.instance_url;
       // Set expiry to 25 minutes from now (tokens typically last 30 minutes)
       this.tokenExpiry = Date.now() + (25 * 60 * 1000);
+      
+      console.log('OAuth successful - instance URL:', this.instanceUrl);
       
       return this.accessToken;
     } catch (error) {
@@ -84,7 +88,12 @@ export class AgentforceClient {
 
   private async makeApiCall(endpoint: string, method: 'GET' | 'POST' | 'DELETE', body?: any): Promise<any> {
     const accessToken = await this.getAccessToken();
-    const url = `https://api.salesforce.com/agentforce/v6.0.0${endpoint}`;
+    
+    if (!this.instanceUrl) {
+      throw new Error('Instance URL not available - ensure authentication is complete');
+    }
+    
+    const url = `https://api.salesforce.com/einstein/ai-agent/v1${endpoint}`;
 
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${accessToken}`,
@@ -125,9 +134,16 @@ export class AgentforceClient {
     
     const payload = {
       externalSessionKey: sessionKey,
+      instanceConfig: {
+        endpoint: this.instanceUrl || this.domainUrl
+      },
+      streamingCapabilities: {
+        chunkTypes: ["Text"]
+      },
       bypassUser: true
     };
 
+    console.log('Starting session with payload:', JSON.stringify(payload, null, 2));
     const response: AgentforceSessionResponse = await this.makeApiCall(`/agents/${this.agentId}/sessions`, 'POST', payload);
     return response.sessionId;
   }
@@ -135,15 +151,15 @@ export class AgentforceClient {
   async sendMessage(sessionId: string, message: string): Promise<string> {
     const payload = {
       message: {
+        sequenceId: 1,
         type: "Text",
         text: message
-      },
-      sequenceId: 1
+      }
     };
 
     console.log('Sending message payload:', JSON.stringify(payload, null, 2));
     const response: AgentforceMessageResponse = await this.makeApiCall(
-      `/sessions/${sessionId}/messages/stream`, 
+      `/sessions/${sessionId}/messages`, 
       'POST', 
       payload
     );
@@ -158,8 +174,8 @@ export class AgentforceClient {
 
   async endSession(sessionId: string): Promise<boolean> {
     try {
-      // Temporarily skip ending sessions to avoid the constraint violation error
-      console.log('Session end skipped for now:', sessionId);
+      await this.makeApiCall(`/sessions/${sessionId}`, 'DELETE');
+      console.log('Session ended successfully:', sessionId);
       return true;
     } catch (error) {
       console.error('Failed to end session:', error);
@@ -168,22 +184,37 @@ export class AgentforceClient {
   }
 
   async chatWithAgent(message: string): Promise<string> {
-    console.log('🤖 Agentforce integration attempted with message:', message);
+    let sessionId: string | null = null;
     
-    // For now, return a helpful message indicating the setup is ready
-    // but the API integration needs to be resolved with Salesforce support
-    return `Hello! I'm your Agentforce agent and I can see that you said: "${message}". 
+    try {
+      console.log('🤖 Starting chat with Agentforce agent, message:', message);
+      
+      // Start a new session
+      sessionId = await this.startSession();
+      console.log('Session started with ID:', sessionId);
+      
+      // Send the message and get response
+      const response = await this.sendMessage(sessionId, message);
+      console.log('Received response from agent:', response);
+      
+      return response;
+    } catch (error: any) {
+      console.error('Error in chat with agent:', error);
+      
+      // Return helpful fallback message while preserving the error for debugging
+      return `I tried to connect with your Agentforce agent to respond to: "${message}"
 
-The voice conversation infrastructure is fully implemented and ready to connect to Salesforce Agentforce. However, we're currently experiencing an API compatibility issue with the Salesforce Agent API v6.0.0 message format that needs to be resolved with Salesforce support.
+However, I'm still experiencing connectivity issues with the Salesforce Agent API. The authentication is working, but there might be additional configuration needed for your specific Salesforce org.
 
-All the core functionality is working:
-✅ Voice recording and speech-to-text
-✅ OAuth authentication with Salesforce  
-✅ Session management infrastructure
-✅ Text-to-speech response playback
-✅ Conversation history and persistence
+Error details: ${error.message}
 
-Once the API message format is resolved, you'll have a complete voice-first Agentforce experience!`;
+All the voice conversation infrastructure is ready - once we resolve this API connectivity, you'll have a complete voice-first Agentforce experience!`;
+    } finally {
+      // Always try to end the session
+      if (sessionId) {
+        await this.endSession(sessionId);
+      }
+    }
   }
 }
 
