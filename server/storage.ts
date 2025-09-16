@@ -24,6 +24,7 @@ export interface IStorage {
   getConversation(id: string): Promise<Conversation | undefined>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversationStatus(id: string, status: string): Promise<void>;
+  updateConversationSessionId(id: string, sessionId: string): Promise<void>;
   
   // Turns
   getTurnsByConversation(conversationId: string): Promise<Turn[]>;
@@ -81,6 +82,7 @@ export class MemStorage implements IStorage {
       ...insertConversation,
       id,
       status: insertConversation.status || "active",
+      sessionId: insertConversation.sessionId || null,
       createdAt: new Date(),
     };
     this.conversations.set(id, conversation);
@@ -91,6 +93,13 @@ export class MemStorage implements IStorage {
     const conversation = this.conversations.get(id);
     if (conversation) {
       this.conversations.set(id, { ...conversation, status });
+    }
+  }
+
+  async updateConversationSessionId(id: string, sessionId: string): Promise<void> {
+    const conversation = this.conversations.get(id);
+    if (conversation) {
+      this.conversations.set(id, { ...conversation, sessionId });
     }
   }
 

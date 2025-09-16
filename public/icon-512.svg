@@ -1,0 +1,5 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="64" fill="#1976d2"/>
+  <path d="M256 128C278.4 128 298.4 148 298.4 170.4V213.6C298.4 236 278.4 256 256 256C233.6 256 213.6 236 213.6 213.6V170.4C213.6 148 233.6 128 256 128ZM384 213.6V256C384 339.2 318.4 405.6 235.2 405.6S86.4 339.2 86.4 256V213.6H128V256C128 315.2 175.2 362.4 235.2 362.4S342.4 315.2 342.4 256V213.6H384ZM256 437.6C259.2 437.6 261.6 439.2 261.6 442.4V469.6H250.4V442.4C250.4 439.2 252.8 437.6 256 437.6Z" fill="white"/>
+  <text x="256" y="100" font-family="system-ui, sans-serif" font-size="48" font-weight="600" text-anchor="middle" fill="white">Agentforce</text>
+</svg>

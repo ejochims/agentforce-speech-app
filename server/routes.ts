@@ -258,12 +258,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Text is required' });
       }
 
-      // Call real Agentforce API
-      const response = await agentforceClient.chatWithAgent(text);
+      if (!conversationId) {
+        return res.status(400).json({ error: 'ConversationId is required' });
+      }
+
+      // Get the conversation to check for existing sessionId
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+
+      // Call Agentforce API with session persistence
+      const { response, sessionId } = await agentforceClient.chatWithAgentInConversation(
+        text, 
+        conversation.sessionId || undefined
+      );
+
+      // Update conversation with sessionId if it's new or changed
+      if (sessionId !== conversation.sessionId) {
+        await storage.updateConversationSessionId(conversationId, sessionId);
+      }
 
       res.json({ 
         text: response,
-        conversationId 
+        conversationId,
+        sessionId // Include sessionId in response for debugging
       });
     } catch (error: any) {
       console.error('Error calling Agentforce:', error);

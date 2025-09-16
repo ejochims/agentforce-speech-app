@@ -13,6 +13,7 @@ export const conversations = pgTable("conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   status: varchar("status").notNull().default("active"), // active, completed, error
+  sessionId: text("session_id"), // Agentforce session ID for maintaining context
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

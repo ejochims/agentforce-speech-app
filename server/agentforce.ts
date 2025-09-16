@@ -216,6 +216,58 @@ All the voice conversation infrastructure is ready - once we resolve this API co
       }
     }
   }
+
+  // New method for conversation-based chat with session persistence
+  async chatWithAgentInConversation(message: string, existingSessionId?: string): Promise<{ response: string; sessionId: string }> {
+    let sessionId = existingSessionId;
+    
+    try {
+      console.log('🤖 Chat with Agentforce agent in conversation, message:', message);
+      
+      // Only start a new session if we don't have one
+      if (!sessionId) {
+        sessionId = await this.startSession();
+        console.log('New session started with ID:', sessionId);
+      } else {
+        console.log('Reusing existing session ID:', sessionId);
+      }
+      
+      // Send the message and get response
+      const response = await this.sendMessage(sessionId, message);
+      console.log('Received response from agent:', response);
+      
+      return { response, sessionId };
+    } catch (error: any) {
+      console.error('Error in conversation chat with agent:', error);
+      
+      // If session failed, it might be expired - try with a new session
+      if (existingSessionId && error.message.includes('404')) {
+        console.log('Session expired, starting new session...');
+        return this.chatWithAgentInConversation(message); // Retry without sessionId
+      }
+      
+      // Return helpful fallback message while preserving the error for debugging
+      const fallbackResponse = `I tried to connect with your Agentforce agent to respond to: "${message}"
+
+However, I'm still experiencing connectivity issues with the Salesforce Agent API. The authentication is working, but there might be additional configuration needed for your specific Salesforce org.
+
+Error details: ${error.message}
+
+All the voice conversation infrastructure is ready - once we resolve this API connectivity, you'll have a complete voice-first Agentforce experience!`;
+      
+      return {
+        response: fallbackResponse,
+        sessionId: sessionId || 'error'
+      };
+    }
+    // NOTE: Don't end session here - keep it alive for the conversation
+  }
+
+  // Method to explicitly end a conversation session
+  async endConversationSession(sessionId: string): Promise<boolean> {
+    console.log('Ending conversation session:', sessionId);
+    return this.endSession(sessionId);
+  }
 }
 
 // Export a singleton instance
