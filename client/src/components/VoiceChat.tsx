@@ -63,12 +63,6 @@ export default function VoiceChat() {
             />
           </div>
 
-          {/* Bottom instruction */}
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground" data-testid="text-hold-instruction">
-              Hold to speak
-            </p>
-          </div>
         </div>
       </div>
 
