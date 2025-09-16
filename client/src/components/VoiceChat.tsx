@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Mic, Phone, Settings, Download, Loader2 } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import VoiceRecordButton from './VoiceRecordButton';
@@ -13,6 +14,9 @@ export default function VoiceChat() {
   const [isRecording, setIsRecording] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showTextInput, setShowTextInput] = useState(false);
+  const [textMessage, setTextMessage] = useState('');
+  const [currentView, setCurrentView] = useState<'chat' | 'history'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -80,6 +84,34 @@ export default function VoiceChat() {
   const handleRecordingStart = () => {
     setIsRecording(true);
     console.log('Voice recording started');
+  };
+
+  const handleTextMessage = async () => {
+    if (!textMessage.trim() || !currentConversationId) return;
+    
+    console.log('Sending text message:', textMessage);
+    setIsProcessing(true);
+    
+    try {
+      // Create user turn
+      createTurn({
+        conversationId: currentConversationId,
+        role: 'user',
+        text: textMessage,
+      });
+
+      // Get agent response
+      getAgentResponse({
+        text: textMessage,
+        conversationId: currentConversationId,
+      });
+      
+      setTextMessage('');
+    } catch (error) {
+      console.error('Error sending text message:', error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRecordingStop = async (audioBlob?: Blob) => {
@@ -217,17 +249,73 @@ export default function VoiceChat() {
       </div>
 
       {/* Voice Interface */}
-      <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
-        <div className="flex flex-col items-center gap-4">
-          <AudioVisualizer isActive={isRecording} />
-          
-          <VoiceRecordButton
-            onRecordingStart={handleRecordingStart}
-            onRecordingStop={handleRecordingStop}
-            disabled={isProcessing}
-          />
+      {currentView === 'chat' && (
+        <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <AudioVisualizer isActive={isRecording} />
+            
+            <VoiceRecordButton
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+              disabled={isProcessing}
+            />
+            
+            {/* Text Input Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowTextInput(!showTextInput)}
+              className="text-xs text-muted-foreground"
+              data-testid="button-toggle-text-input"
+            >
+              <MessageCircle className="w-4 h-4 mr-1" />
+              {showTextInput ? 'Hide' : 'Show'} Text Input
+            </Button>
+            
+            {/* Text Input Field */}
+            {showTextInput && (
+              <div className="w-full max-w-sm flex gap-2">
+                <Input
+                  value={textMessage}
+                  onChange={(e) => setTextMessage(e.target.value)}
+                  placeholder="Type your message..."
+                  onKeyPress={(e) => e.key === 'Enter' && handleTextMessage()}
+                  disabled={isProcessing}
+                  data-testid="input-text-message"
+                />
+                <Button
+                  onClick={handleTextMessage}
+                  disabled={isProcessing || !textMessage.trim()}
+                  data-testid="button-send-text"
+                >
+                  Send
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+      
+      {/* History View */}
+      {currentView === 'history' && (
+        <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
+          <div className="text-center">
+            <History className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-2" data-testid="text-history-title">Conversation History</h3>
+            <p className="text-sm text-muted-foreground mb-4" data-testid="text-history-description">
+              Your current conversation is displayed above. 
+              {turns.length > 0 ? `You have ${turns.length} messages in this conversation.` : 'No messages yet.'}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => setCurrentView('chat')}
+              data-testid="button-back-to-chat"
+            >
+              Back to Chat
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Action Buttons */}
       <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2">
@@ -279,9 +367,13 @@ export default function VoiceChat() {
             variant="ghost" 
             className="flex flex-col items-center gap-1 py-3 px-4"
             data-testid="button-tab-history"
+            onClick={() => {
+              console.log('History tab clicked');
+              setCurrentView(currentView === 'history' ? 'chat' : 'history');
+            }}
           >
-            <div className="w-5 h-5 border-b-2 border-foreground"></div>
-            <span className="text-xs text-foreground font-medium">History</span>
+            <History className={`w-5 h-5 ${currentView === 'history' ? 'text-foreground' : 'text-muted-foreground'}`} />
+            <span className={`text-xs ${currentView === 'history' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>History</span>
           </Button>
           
           <Button 

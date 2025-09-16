@@ -20,21 +20,35 @@ export default function VoiceRecordButton({
 
   const startRecording = async () => {
     try {
+      console.log('Attempting to start recording...');
+      
+      // Check for media device support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('Media devices not supported in this browser');
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Got media stream:', stream);
+      
       const recorder = new MediaRecorder(stream);
+      console.log('Created MediaRecorder:', recorder);
       
       audioChunks.current = [];
       
       recorder.ondataavailable = (event) => {
+        console.log('Data available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
           audioChunks.current.push(event.data);
         }
       };
       
       recorder.onstop = () => {
+        console.log('MediaRecorder stopped, processing audio...');
         // Use the actual mime type from MediaRecorder instead of forcing audio/wav
         const actualMimeType = recorder.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunks.current, { type: actualMimeType });
+        console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
         onRecordingStop?.(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -43,9 +57,11 @@ export default function VoiceRecordButton({
       mediaRecorder.current = recorder;
       setIsRecording(true);
       onRecordingStart?.();
-      console.log('Recording started');
+      console.log('Recording started successfully');
     } catch (error) {
       console.error('Error starting recording:', error);
+      // Still call the start handler to show UI feedback even if recording fails
+      onRecordingStart?.();
     }
   };
 
