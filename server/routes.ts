@@ -27,6 +27,7 @@ const upload = multer({
        file.mimetype.includes('mp3') || 
        file.mimetype.includes('mpeg') || 
        file.mimetype.includes('webm') || 
+       file.mimetype.includes('mp4') ||
        file.mimetype.includes('ogg') ||
        file.mimetype.includes('m4a') ||
        file.mimetype.includes('flac'));
