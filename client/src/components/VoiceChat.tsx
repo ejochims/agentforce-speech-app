@@ -1,36 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
-import ChatHeader from './ChatHeader';
-import MessageBubble from './MessageBubble';
+import { useState } from 'react';
+import { Mic, Phone, Settings, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import VoiceRecordButton from './VoiceRecordButton';
 import AudioVisualizer from './AudioVisualizer';
 
-interface Message {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: string;
-}
-
 export default function VoiceChat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hi, I'm an AI assistant powered by Agentforce. How can I help you today?",
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
   const [isRecording, setIsRecording] = useState(false);
-  const [isAgentTyping, setIsAgentTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isAgentTyping]);
 
   const handleRecordingStart = () => {
     setIsRecording(true);
@@ -39,111 +14,127 @@ export default function VoiceChat() {
 
   const handleRecordingStop = (audioBlob?: Blob) => {
     setIsRecording(false);
-    
-    if (audioBlob) {
-      // Simulate speech-to-text transcription
-      const simulatedTranscriptions = [
-        "What's the weather like today?",
-        "Can you help me with my order status?",
-        "Tell me about your services",
-        "How can I contact support?",
-        "What are your business hours?"
-      ];
-      
-      const userMessage = simulatedTranscriptions[Math.floor(Math.random() * simulatedTranscriptions.length)];
-      
-      // Add user message
-      const newUserMessage: Message = {
-        id: Date.now().toString(),
-        text: userMessage,
-        isUser: true,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      
-      setMessages(prev => [...prev, newUserMessage]);
-      
-      // Simulate agent response delay
-      setIsAgentTyping(true);
-      setTimeout(() => {
-        const agentResponses = [
-          "I'd be happy to help you with that. Let me check the current information for you.",
-          "That's a great question! I can assist you with finding the right solution.",
-          "I understand what you're looking for. Here's what I can tell you about that.",
-          "Let me help you with that request. I'll gather the relevant information.",
-          "Thank you for asking! I can provide you with the details you need."
-        ];
-        
-        const agentResponse = agentResponses[Math.floor(Math.random() * agentResponses.length)];
-        
-        const newAgentMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: agentResponse,
-          isUser: false,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        
-        setMessages(prev => [...prev, newAgentMessage]);
-        setIsAgentTyping(false);
-      }, 2000);
-    }
-    
-    console.log('Voice recording stopped');
-  };
-
-  const handleBack = () => {
-    console.log('Back button clicked');
-    // Todo: implement navigation
-  };
-
-  const handleSettings = () => {
-    console.log('Settings button clicked');
-    // Todo: implement settings
+    console.log('Voice recording stopped', audioBlob);
+    // Todo: Process audio and send to Agentforce API
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background max-w-md mx-auto">
-      <ChatHeader 
-        agentName="Agentforce"
-        isOnline={true}
-        onBack={handleBack}
-        onSettings={handleSettings}
-      />
+    <div className="min-h-screen bg-background">
+      {/* iOS-style Status Bar Area */}
+      <div className="h-12"></div>
       
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message.text}
-            isUser={message.isUser}
-            timestamp={message.timestamp}
-          />
-        ))}
-        
-        {isAgentTyping && (
-          <MessageBubble
-            message=""
-            isUser={false}
-            isTyping={true}
-          />
-        )}
-        
-        <div ref={messagesEndRef} />
+      {/* Header */}
+      <div className="text-center py-6">
+        <h1 className="text-2xl font-semibold text-primary" data-testid="text-agentforce-title">
+          Agentforce
+        </h1>
       </div>
-      
-      {/* Voice Interface */}
-      <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
-        <div className="flex flex-col items-center gap-4">
-          <AudioVisualizer isActive={isRecording} />
+
+      {/* Main Voice Interface Card */}
+      <div className="px-6 pb-8">
+        <div className="bg-card border border-card-border rounded-3xl p-8 mx-auto max-w-sm shadow-sm">
+          {/* Microphone Icon */}
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+              <Mic className="w-8 h-8 text-muted-foreground" />
+            </div>
+          </div>
+
+          {/* Title and Instructions */}
+          <div className="text-center mb-8">
+            <h2 className="text-xl font-semibold text-foreground mb-2" data-testid="text-main-title">
+              Talk to AgentForce
+            </h2>
+            <p className="text-sm text-muted-foreground" data-testid="text-instructions">
+              Hold the button below to talk to AgentForce
+            </p>
+          </div>
+
+          {/* Audio Visualizer */}
+          <div className="mb-6">
+            <AudioVisualizer isActive={isRecording} height={32} />
+          </div>
+
+          {/* Main Voice Button */}
+          <div className="flex justify-center mb-6">
+            <VoiceRecordButton
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+            />
+          </div>
+
+          {/* Bottom instruction */}
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground" data-testid="text-hold-instruction">
+              Hold to speak
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Action Buttons */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2">
+        <div className="flex items-center gap-4">
+          <Button
+            size="icon"
+            variant="destructive"
+            className="w-12 h-12 rounded-full"
+            data-testid="button-end-call"
+            onClick={() => console.log('End call clicked')}
+          >
+            <Phone className="w-5 h-5" />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="secondary"
+            className="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 text-white"
+            data-testid="button-mute"
+            onClick={() => console.log('Mute clicked')}
+          >
+            <Mic className="w-5 h-5" />
+          </Button>
+
+          <Button
+            size="icon"
+            className="w-12 h-12 rounded-full"
+            data-testid="button-more"
+            onClick={() => console.log('More options clicked')}
+          >
+            <Download className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Bottom Tab Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border">
+        <div className="flex justify-around py-2 max-w-md mx-auto">
+          <Button 
+            variant="ghost" 
+            className="flex flex-col items-center gap-1 py-3 px-4"
+            data-testid="button-tab-download"
+          >
+            <Download className="w-5 h-5 text-primary" />
+            <span className="text-xs text-muted-foreground">Download</span>
+          </Button>
           
-          <VoiceRecordButton
-            onRecordingStart={handleRecordingStart}
-            onRecordingStop={handleRecordingStop}
-          />
+          <Button 
+            variant="ghost" 
+            className="flex flex-col items-center gap-1 py-3 px-4"
+            data-testid="button-tab-history"
+          >
+            <div className="w-5 h-5 border-b-2 border-foreground"></div>
+            <span className="text-xs text-foreground font-medium">History</span>
+          </Button>
           
-          <p className="text-xs text-muted-foreground text-center max-w-xs">
-            Talk to AgentForce using your voice. Hold the button to record your message.
-          </p>
+          <Button 
+            variant="ghost" 
+            className="flex flex-col items-center gap-1 py-3 px-4"
+            data-testid="button-tab-settings"
+          >
+            <Settings className="w-5 h-5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Settings</span>
+          </Button>
         </div>
       </div>
     </div>
