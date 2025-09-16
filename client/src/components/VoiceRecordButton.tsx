@@ -32,7 +32,9 @@ export default function VoiceRecordButton({
       };
       
       recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
+        // Use the actual mime type from MediaRecorder instead of forcing audio/wav
+        const actualMimeType = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunks.current, { type: actualMimeType });
         onRecordingStop?.(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
