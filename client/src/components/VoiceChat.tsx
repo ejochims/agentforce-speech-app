@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -45,6 +45,23 @@ export default function VoiceChat() {
       localStorage.setItem('currentConversationId', conversation.id);
     },
   });
+
+  // Function to start a new chat
+  const startNewChat = () => {
+    // Clear current conversation
+    setCurrentConversationId(null);
+    localStorage.removeItem('currentConversationId');
+    
+    // Clear any text input
+    setTextMessage('');
+    setShowTextInput(false);
+    
+    // Invalidate and refetch queries to clear cached data
+    queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+    
+    // Create a new conversation
+    createConversation({ title: 'Voice Chat', status: 'active' });
+  };
 
   // Create turn mutation
   const { mutate: createTurn } = useMutation({
@@ -195,7 +212,7 @@ export default function VoiceChat() {
       <div className="h-12"></div>
       
       {/* Header */}
-      <div className="text-center py-6">
+      <div className="text-center py-6 relative">
         <div className="flex items-center justify-center gap-3 mb-2">
           <img 
             src={agentforceLogo} 
@@ -207,6 +224,19 @@ export default function VoiceChat() {
             Agentforce
           </h1>
         </div>
+        
+        {/* New Chat Button - Show only when there's an active conversation */}
+        {turns.length > 0 && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="absolute top-4 right-4 w-9 h-9"
+            onClick={startNewChat}
+            data-testid="button-new-chat"
+          >
+            <Plus className="w-5 h-5" />
+          </Button>
+        )}
       </div>
 
       {/* Messages Container */}
@@ -364,15 +394,6 @@ export default function VoiceChat() {
           <Button 
             variant="ghost" 
             className="flex flex-col items-center gap-1 py-3 px-4"
-            data-testid="button-tab-download"
-          >
-            <Download className="w-5 h-5 text-primary" />
-            <span className="text-xs text-muted-foreground">Download</span>
-          </Button>
-          
-          <Button 
-            variant="ghost" 
-            className="flex flex-col items-center gap-1 py-3 px-4"
             data-testid="button-tab-history"
             onClick={() => {
               console.log('History tab clicked');
@@ -381,15 +402,6 @@ export default function VoiceChat() {
           >
             <History className={`w-5 h-5 ${currentView === 'history' ? 'text-foreground' : 'text-muted-foreground'}`} />
             <span className={`text-xs ${currentView === 'history' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>History</span>
-          </Button>
-          
-          <Button 
-            variant="ghost" 
-            className="flex flex-col items-center gap-1 py-3 px-4"
-            data-testid="button-tab-settings"
-          >
-            <Settings className="w-5 h-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Settings</span>
           </Button>
         </div>
       </div>
