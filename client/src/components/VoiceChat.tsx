@@ -7,6 +7,7 @@ import { apiRequest } from '@/lib/queryClient';
 import VoiceRecordButton from './VoiceRecordButton';
 import AudioVisualizer from './AudioVisualizer';
 import MessageBubble from './MessageBubble';
+import { shouldGroupMessage } from '@/lib/time';
 import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
 import type { Conversation, Turn } from '@shared/schema';
 
@@ -18,6 +19,7 @@ export default function VoiceChat() {
   const [textMessage, setTextMessage] = useState('');
   const [currentView, setCurrentView] = useState<'chat' | 'history'>('chat');
   const [isValidatingConversation, setIsValidatingConversation] = useState(false);
+  const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -117,14 +119,33 @@ export default function VoiceChat() {
     createConversation({ title: 'Voice Chat', status: 'active' });
   };
 
-  // Create turn mutation
+  // Create turn mutation with message state tracking
   const { mutate: createTurn } = useMutation({
-    mutationFn: (turnData: { conversationId: string; role: string; text: string; triggerAgent?: boolean }) =>
-      apiRequest(`/api/conversations/${turnData.conversationId}/turns`, {
+    mutationFn: (turnData: { conversationId: string; role: string; text: string; triggerAgent?: boolean; pendingId?: string }) => {
+      // Add pending message for user messages
+      if (turnData.role === 'user' && turnData.pendingId) {
+        setPendingMessages(prev => new Map(prev.set(turnData.pendingId!, { 
+          text: turnData.text, 
+          timestamp: new Date(), 
+          state: 'sending' 
+        })));
+      }
+      
+      return apiRequest(`/api/conversations/${turnData.conversationId}/turns`, {
         method: 'POST',
         body: { role: turnData.role, text: turnData.text },
-      }),
+      });
+    },
     onSuccess: (data, variables) => {
+      // Remove pending message on success
+      if (variables.pendingId) {
+        setPendingMessages(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(variables.pendingId!);
+          return newMap;
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ['/api/conversations', currentConversationId, 'turns'] });
       
       // If this was a user turn that should trigger agent response, do it now
@@ -134,6 +155,17 @@ export default function VoiceChat() {
           conversationId: variables.conversationId,
         });
       }
+    },
+    onError: (error, variables) => {
+      // Update pending message to error state
+      if (variables.pendingId) {
+        setPendingMessages(prev => new Map(prev.set(variables.pendingId!, { 
+          text: variables.text, 
+          timestamp: new Date(), 
+          state: 'error' 
+        })));
+      }
+      console.error('Error creating turn:', error);
     },
   });
 
@@ -193,13 +225,17 @@ export default function VoiceChat() {
     console.log('Sending text message:', textMessage);
     setIsProcessing(true);
     
+    const pendingId = `pending-${Date.now()}-${Math.random()}`;
+    const messageText = textMessage;
+    
     try {
       // Create user turn and trigger agent response after it's saved
       createTurn({
         conversationId: currentConversationId,
         role: 'user',
-        text: textMessage,
-        triggerAgent: true, // This will trigger agent response after turn is saved
+        text: messageText,
+        triggerAgent: true,
+        pendingId,
       });
       
       setTextMessage('');
@@ -251,12 +287,15 @@ export default function VoiceChat() {
       console.log('Transcribed text:', text);
 
       if (text.trim()) {
+        const pendingId = `pending-${Date.now()}-${Math.random()}`;
+        
         // Create user turn and trigger agent response after it's saved
         createTurn({
           conversationId: currentConversationId,
           role: 'user',
           text: text,
-          triggerAgent: true, // This will trigger agent response after turn is saved
+          triggerAgent: true,
+          pendingId,
         });
       }
     } catch (error) {
@@ -370,21 +409,72 @@ export default function VoiceChat() {
 
           {/* Messages */}
           {turns.length > 0 && (
-            <div className="space-y-lg pb-lg">
-              {turns.map((turn) => (
-                <MessageBubble
-                  key={turn.id}
-                  message={turn.text}
-                  isUser={turn.role === 'user'}
-                  timestamp={new Date(turn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                />
-              ))}
+            <div className="pb-lg">
+              {/* Render saved messages */}
+              {turns.map((turn, index) => {
+                const previousTurn = index > 0 ? turns[index - 1] : null;
+                const nextTurn = index < turns.length - 1 ? turns[index + 1] : null;
+                
+                const isGroupedWithPrevious = shouldGroupMessage(
+                  { role: turn.role, createdAt: turn.createdAt.toISOString() },
+                  previousTurn ? { role: previousTurn.role, createdAt: previousTurn.createdAt.toISOString() } : null
+                );
+                const isGroupedWithNext = nextTurn ? shouldGroupMessage(
+                  { role: nextTurn.role, createdAt: nextTurn.createdAt.toISOString() },
+                  { role: turn.role, createdAt: turn.createdAt.toISOString() }
+                ) : false;
+                
+                const isFirstInGroup = !isGroupedWithPrevious;
+                const isLastInGroup = !isGroupedWithNext;
+                
+                return (
+                  <MessageBubble
+                    key={turn.id}
+                    message={turn.text}
+                    isUser={turn.role === 'user'}
+                    timestamp={new Date(turn.createdAt)}
+                    isFirstInGroup={isFirstInGroup}
+                    isLastInGroup={isLastInGroup}
+                    showAvatar={true}
+                    showTimestamp={true}
+                    messageState="sent"
+                  />
+                );
+              })}
               
+              {/* Render pending messages */}
+              {Array.from(pendingMessages.entries()).map(([pendingId, pendingMessage]) => {
+                const lastTurn = turns[turns.length - 1];
+                const isGroupedWithPrevious = lastTurn ? shouldGroupMessage(
+                  { role: 'user', createdAt: pendingMessage.timestamp.toISOString() },
+                  { role: lastTurn.role, createdAt: lastTurn.createdAt.toISOString() }
+                ) : false;
+                
+                return (
+                  <MessageBubble
+                    key={pendingId}
+                    message={pendingMessage.text}
+                    isUser={true}
+                    timestamp={pendingMessage.timestamp}
+                    isFirstInGroup={!isGroupedWithPrevious}
+                    isLastInGroup={true}
+                    showAvatar={true}
+                    showTimestamp={true}
+                    messageState={pendingMessage.state}
+                  />
+                );
+              })}
+              
+              {/* Agent typing indicator */}
               {agentPending && (
                 <MessageBubble
                   message=""
                   isUser={false}
                   isTyping={true}
+                  isFirstInGroup={true}
+                  isLastInGroup={true}
+                  showAvatar={true}
+                  showTimestamp={false}
                 />
               )}
 
