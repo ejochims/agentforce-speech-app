@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,32 +17,86 @@ export default function VoiceChat() {
   const [showTextInput, setShowTextInput] = useState(false);
   const [textMessage, setTextMessage] = useState('');
   const [currentView, setCurrentView] = useState<'chat' | 'history'>('chat');
+  const [isValidatingConversation, setIsValidatingConversation] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  // Create a new conversation on component mount (only if none exists)
-  useEffect(() => {
-    const existingConversationId = localStorage.getItem('currentConversationId');
-    if (existingConversationId) {
-      setCurrentConversationId(existingConversationId);
-    } else {
-      createConversation({ title: 'Voice Chat', status: 'active' });
+  // Validate conversation on component mount
+  const validateAndSetConversation = useCallback(async (conversationId: string) => {
+    setIsValidatingConversation(true);
+    try {
+      // Try to fetch the conversation to validate it exists
+      const response = await fetch(`/api/conversations/${conversationId}`);
+      
+      if (response.ok) {
+        const conversation = await response.json();
+        console.log('✓ Valid conversation found:', conversationId);
+        setCurrentConversationId(conversationId);
+        return true;
+      } else {
+        throw new Error(`Conversation not found: ${response.status}`);
+      }
+    } catch (error) {
+      console.log('✗ Conversation validation failed:', error);
+      // Conversation doesn't exist, clean up localStorage and create new one
+      localStorage.removeItem('currentConversationId');
+      setCurrentConversationId(null);
+      return false;
+    } finally {
+      setIsValidatingConversation(false);
     }
   }, []);
+
+  // Initialize conversation on component mount
+  useEffect(() => {
+    const initializeConversation = async () => {
+      const existingConversationId = localStorage.getItem('currentConversationId');
+      
+      if (existingConversationId) {
+        console.log('🔍 Validating existing conversation:', existingConversationId);
+        const isValid = await validateAndSetConversation(existingConversationId);
+        
+        if (!isValid) {
+          console.log('📝 Creating new conversation after validation failed');
+          createConversation({ title: 'Voice Chat', status: 'active' });
+        }
+      } else {
+        console.log('📝 No existing conversation, creating new one');
+        createConversation({ title: 'Voice Chat', status: 'active' });
+      }
+    };
+    
+    initializeConversation();
+  }, [validateAndSetConversation]);
 
   // Get current conversation turns
   const { data: turns = [], isLoading: turnsLoading } = useQuery<Turn[]>({
     queryKey: ['/api/conversations', currentConversationId, 'turns'],
-    enabled: !!currentConversationId,
+    enabled: !!currentConversationId && !isValidatingConversation,
   });
 
-  // Create conversation mutation
+  // Create conversation mutation with retry logic
   const { mutate: createConversation } = useMutation({
-    mutationFn: (conversationData: { title: string; status: string }) =>
-      apiRequest('/api/conversations', { method: 'POST', body: conversationData }),
-    onSuccess: (conversation: Conversation) => {
+    mutationFn: (conversationData: { title: string; status: string; retryAgentRequest?: { text: string } }) =>
+      apiRequest('/api/conversations', { method: 'POST', body: { title: conversationData.title, status: conversationData.status } }),
+    onSuccess: (conversation: Conversation, variables) => {
+      console.log('✓ New conversation created:', conversation.id);
       setCurrentConversationId(conversation.id);
       localStorage.setItem('currentConversationId', conversation.id);
+      
+      // Invalidate queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      
+      // If this was created due to a failed agent request, retry it now
+      if (variables.retryAgentRequest) {
+        console.log('🔄 Retrying agent request with new conversation');
+        setTimeout(() => {
+          getAgentResponse({
+            text: variables.retryAgentRequest!.text,
+            conversationId: conversation.id,
+          });
+        }, 100); // Small delay to ensure state is updated
+      }
     },
   });
 
@@ -83,7 +137,7 @@ export default function VoiceChat() {
     },
   });
 
-  // Agentforce mutation
+  // Agentforce mutation with error handling
   const { mutate: getAgentResponse, isPending: agentPending } = useMutation({
     mutationFn: ({ text, conversationId }: { text: string; conversationId: string }) =>
       apiRequest('/api/agentforce', { method: 'POST', body: { text, conversationId } }),
@@ -97,6 +151,27 @@ export default function VoiceChat() {
           conversationId: currentConversationId,
           role: 'assistant',
           text: response.text,
+        });
+      }
+    },
+    onError: (error: any, variables) => {
+      console.error('Agentforce error:', error);
+      
+      // Check if it's a conversation not found error
+      if (error.message?.includes('Conversation not found') || 
+          error.status === 404 ||
+          (typeof error === 'string' && error.includes('404'))) {
+        console.log('🔄 Conversation not found, recovering by creating new conversation');
+        
+        // Clear current conversation and create a new one
+        localStorage.removeItem('currentConversationId');
+        setCurrentConversationId(null);
+        
+        // Create new conversation and retry the agent request
+        createConversation({ 
+          title: 'Voice Chat', 
+          status: 'active',
+          retryAgentRequest: { text: variables.text } // Pass data to retry after creation
         });
       }
     },
@@ -250,7 +325,7 @@ export default function VoiceChat() {
 
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {turns.length === 0 && !turnsLoading && (
+        {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
           <div className="text-center py-8">
             <img 
               src={agentforceLogo} 
@@ -264,6 +339,13 @@ export default function VoiceChat() {
             <p className="text-sm text-muted-foreground" data-testid="text-instructions">
               Hold the button below to start your conversation
             </p>
+          </div>
+        )}
+
+        {isValidatingConversation && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+            <span className="text-sm text-muted-foreground">Connecting...</span>
           </div>
         )}
 
@@ -301,7 +383,7 @@ export default function VoiceChat() {
             <VoiceRecordButton
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
-              disabled={isProcessing}
+              disabled={isProcessing || isValidatingConversation}
             />
             
             {/* Text Input Toggle */}

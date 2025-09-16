@@ -72,6 +72,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/conversations/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const conversation = await storage.getConversation(id);
+      
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      
+      res.json(conversation);
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      res.status(500).json({ error: 'Failed to fetch conversation' });
+    }
+  });
+
   app.get('/api/conversations/:id/turns', async (req, res) => {
     try {
       const { id } = req.params;
@@ -86,6 +102,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/conversations/:id/turns', async (req, res) => {
     try {
       const { id } = req.params;
+      
+      // Validate that the conversation exists before creating a turn
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        console.log(`❌ Cannot create turn: Conversation ${id} not found`);
+        return res.status(404).json({ 
+          error: 'Conversation not found',
+          message: `Cannot create turn for non-existent conversation: ${id}`
+        });
+      }
+      
+      console.log(`✓ Conversation ${id} exists, creating turn`);
       const turnData = insertTurnSchema.parse({ ...req.body, conversationId: id });
       const turn = await storage.createTurn(turnData);
       res.json(turn);
@@ -264,15 +292,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the conversation to check for existing sessionId
-      console.log('🔍 Looking for conversation:', conversationId);
       const conversation = await storage.getConversation(conversationId);
-      console.log('🔍 Found conversation:', conversation ? 'YES' : 'NO', conversation?.id);
-      
       if (!conversation) {
-        console.log('❌ Conversation not found in storage for ID:', conversationId);
-        // List all conversations for debugging
-        const allConversations = await storage.getConversations();
-        console.log('📋 Available conversations:', allConversations.map(c => c.id));
         return res.status(404).json({ error: 'Conversation not found' });
       }
 
@@ -281,6 +302,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         text, 
         conversation.sessionId || undefined
       );
+
+      // Validate response is not undefined or empty
+      if (!response || typeof response !== 'string' || response.trim() === '') {
+        console.error('❌ Agent returned invalid response:', response);
+        return res.status(500).json({ 
+          error: 'Agent response invalid',
+          details: 'The agent did not provide a valid text response'
+        });
+      }
+
+      console.log('✅ Agent response validated:', response.substring(0, 100) + '...');
 
       // Update conversation with sessionId if it's new or changed
       if (sessionId !== conversation.sessionId) {

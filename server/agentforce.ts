@@ -167,8 +167,13 @@ export class AgentforceClient {
     // Extract the message from the response - it may be in a different format
     // The API might return messages array or a single message
     if (response.messages && response.messages.length > 0) {
-      return response.messages[response.messages.length - 1].message;
+      const lastMessage = response.messages[response.messages.length - 1];
+      if (lastMessage && lastMessage.message) {
+        return lastMessage.message;
+      }
     }
+    
+    // Ensure we always return a string, never undefined
     return response.message || 'Response received from agent';
   }
 
