@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { agentforceClient } from "./agentforce";
 import OpenAI from "openai";
 import { 
   insertConversationSchema, 
@@ -141,7 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Agentforce integration (stub for now)
+  // Agentforce integration
   app.post('/api/agentforce', async (req, res) => {
     try {
       const { text, conversationId } = req.body;
@@ -150,27 +151,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Text is required' });
       }
 
-      // Stub response - replace with real Agentforce API call
-      const agentResponses = [
-        "I understand your question. Let me help you with that. Based on the information you've provided, here's what I can tell you...",
-        "That's a great point. From my analysis of similar cases, I would recommend considering the following options...",
-        "Thank you for that information. I've processed your request and here are the key insights I can provide...",
-        "I see what you're looking for. Let me break this down into actionable steps you can take...",
-        "Based on my knowledge and experience with similar situations, here's my assessment and recommendations..."
-      ];
-
-      // Simulate realistic response time
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-
-      const response = agentResponses[Math.floor(Math.random() * agentResponses.length)];
+      // Call real Agentforce API
+      const response = await agentforceClient.chatWithAgent(text);
 
       res.json({ 
         text: response,
         conversationId 
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error calling Agentforce:', error);
-      res.status(500).json({ error: 'Failed to get Agentforce response' });
+      res.status(500).json({ 
+        error: 'Failed to get Agentforce response',
+        details: error.message 
+      });
     }
   });
 
