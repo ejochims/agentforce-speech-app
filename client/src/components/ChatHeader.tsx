@@ -15,8 +15,8 @@ export default function ChatHeader({
   onSettings
 }: ChatHeaderProps) {
   return (
-    <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
-      <div className="flex items-center gap-3">
+    <header className="flex items-center justify-between p-lg border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-50">
+      <div className="flex items-center gap-md">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -27,7 +27,7 @@ export default function ChatHeader({
           <ArrowLeft className="w-4 h-4" />
         </Button>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-md">
           <div className="relative">
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-semibold text-sm">A</span>

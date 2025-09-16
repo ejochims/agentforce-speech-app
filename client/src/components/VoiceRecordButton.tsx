@@ -118,31 +118,34 @@ export default function VoiceRecordButton({
   };
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-sm">
       <Button
         size="icon"
         disabled={disabled}
         className={`
           w-20 h-20 rounded-full transition-all duration-200 
           ${isRecording 
-            ? 'bg-recording-active border-2 border-recording-active/30 shadow-lg shadow-recording-active/20 animate-pulse' 
-            : 'bg-voice-primary hover:bg-voice-primary/90'
+            ? 'bg-recording-active text-recording-active-foreground border-2 border-recording-active/30 shadow-lg shadow-recording-active/20 animate-pulse hover:bg-recording-active/90' 
+            : 'bg-voice-primary text-voice-primary-foreground hover:bg-voice-primary/90'
           }
+          ${disabled ? 'bg-recording-inactive text-recording-inactive-foreground hover:bg-recording-inactive/90' : ''}
         `}
         onClick={handleToggleRecording}
         data-testid="button-voice-record"
       >
         {isRecording ? (
-          <MicOff className="w-8 h-8 text-white" />
+          <MicOff className="w-8 h-8" />
         ) : (
-          <Mic className="w-8 h-8 text-white" />
+          <Mic className="w-8 h-8" />
         )}
       </Button>
       
       <p className="text-sm text-muted-foreground font-medium">
         {isRecording 
           ? `Recording... ${recordingDuration}s` 
-          : 'Tap to record'
+          : disabled 
+            ? 'Recording disabled'
+            : 'Tap to record'
         }
       </p>
     </div>

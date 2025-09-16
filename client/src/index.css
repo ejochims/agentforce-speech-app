@@ -76,6 +76,31 @@
   --chart-4: 35 90% 55%;
   --chart-5: 320 70% 45%;
 
+  /* Voice & Recording Brand Tokens */
+  --voice-primary: 212 100% 50%;
+  --voice-primary-foreground: 0 0% 100%;
+  --voice-secondary: 212 75% 85%;
+  --voice-secondary-foreground: 0 0% 15%;
+  
+  --recording-active: 142 76% 36%;
+  --recording-active-foreground: 0 0% 100%;
+  --recording-inactive: 0 0% 75%;
+  --recording-inactive-foreground: 0 0% 45%;
+  
+  --voice-processing: 35 90% 55%;
+  --voice-processing-foreground: 0 0% 100%;
+  
+  --voice-error: 0 84% 60%;
+  --voice-error-foreground: 0 0% 100%;
+
+  /* Spacing Scale - 8pt System */
+  --spacing-xs: 0.25rem; /* 4px */
+  --spacing-sm: 0.5rem;  /* 8px */
+  --spacing-md: 0.75rem; /* 12px */
+  --spacing-lg: 1rem;    /* 16px */
+  --spacing-xl: 1.5rem;  /* 24px */
+  --spacing-2xl: 2rem;   /* 32px */
+
   --font-sans: Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -120,6 +145,16 @@
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Voice & Recording Auto-computed Borders */
+  --voice-primary-border: hsl(var(--voice-primary));
+  --voice-primary-border: hsl(from hsl(var(--voice-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  
+  --recording-active-border: hsl(var(--recording-active));
+  --recording-active-border: hsl(from hsl(var(--recording-active)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  
+  --voice-processing-border: hsl(var(--voice-processing));
+  --voice-processing-border: hsl(from hsl(var(--voice-processing)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
 .dark {
@@ -193,6 +228,23 @@
   --chart-3: 280 60% 70%;
   --chart-4: 35 90% 65%;
   --chart-5: 320 70% 65%;
+
+  /* Voice & Recording Brand Tokens - Dark Mode */
+  --voice-primary: 212 100% 50%;
+  --voice-primary-foreground: 0 0% 98%;
+  --voice-secondary: 212 60% 25%;
+  --voice-secondary-foreground: 0 0% 95%;
+  
+  --recording-active: 142 76% 55%;
+  --recording-active-foreground: 0 0% 98%;
+  --recording-inactive: 0 0% 35%;
+  --recording-inactive-foreground: 0 0% 65%;
+  
+  --voice-processing: 35 90% 65%;
+  --voice-processing-foreground: 0 0% 98%;
+  
+  --voice-error: 0 84% 60%;
+  --voice-error-foreground: 0 0% 98%;
 
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.15);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.20);

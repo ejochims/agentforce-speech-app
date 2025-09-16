@@ -17,9 +17,34 @@ export default {
         border: "hsl(var(--border) / <alpha-value>)",
         input: "hsl(var(--input) / <alpha-value>)",
         
-        // Voice app specific colors
-        "recording-active": "hsl(var(--chart-2) / <alpha-value>)", // Green for recording
-        "voice-primary": "hsl(var(--primary) / <alpha-value>)", // Blue for voice button
+        // Voice app specific semantic tokens
+        "voice-primary": {
+          DEFAULT: "hsl(var(--voice-primary) / <alpha-value>)",
+          foreground: "hsl(var(--voice-primary-foreground) / <alpha-value>)",
+          border: "var(--voice-primary-border)",
+        },
+        "voice-secondary": {
+          DEFAULT: "hsl(var(--voice-secondary) / <alpha-value>)",
+          foreground: "hsl(var(--voice-secondary-foreground) / <alpha-value>)",
+        },
+        "recording-active": {
+          DEFAULT: "hsl(var(--recording-active) / <alpha-value>)",
+          foreground: "hsl(var(--recording-active-foreground) / <alpha-value>)",
+          border: "var(--recording-active-border)",
+        },
+        "recording-inactive": {
+          DEFAULT: "hsl(var(--recording-inactive) / <alpha-value>)",
+          foreground: "hsl(var(--recording-inactive-foreground) / <alpha-value>)",
+        },
+        "voice-processing": {
+          DEFAULT: "hsl(var(--voice-processing) / <alpha-value>)",
+          foreground: "hsl(var(--voice-processing-foreground) / <alpha-value>)",
+          border: "var(--voice-processing-border)",
+        },
+        "voice-error": {
+          DEFAULT: "hsl(var(--voice-error) / <alpha-value>)",
+          foreground: "hsl(var(--voice-error-foreground) / <alpha-value>)",
+        },
         card: {
           DEFAULT: "hsl(var(--card) / <alpha-value>)",
           foreground: "hsl(var(--card-foreground) / <alpha-value>)",
@@ -85,6 +110,14 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+      },
+      spacing: {
+        "xs": "var(--spacing-xs)", /* 4px */
+        "sm": "var(--spacing-sm)", /* 8px */
+        "md": "var(--spacing-md)", /* 12px */
+        "lg": "var(--spacing-lg)", /* 16px */
+        "xl": "var(--spacing-xl)", /* 24px */
+        "2xl": "var(--spacing-2xl)", /* 32px */
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

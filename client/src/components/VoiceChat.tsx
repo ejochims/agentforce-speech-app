@@ -296,8 +296,8 @@ export default function VoiceChat() {
       <div className="h-12"></div>
       
       {/* Header */}
-      <div className="text-center py-6 relative">
-        <div className="flex items-center justify-center gap-3 mb-2">
+      <div className="text-center py-xl relative">
+        <div className="flex items-center justify-center gap-md mb-sm">
           <img 
             src={agentforceLogo} 
             alt="Agentforce" 
@@ -314,7 +314,7 @@ export default function VoiceChat() {
           <Button
             size="icon"
             variant="ghost"
-            className="absolute top-4 right-4 w-9 h-9"
+            className="absolute top-lg right-lg w-9 h-9"
             onClick={startNewChat}
             data-testid="button-new-chat"
           >
@@ -324,16 +324,16 @@ export default function VoiceChat() {
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-lg py-xl space-y-lg">
         {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
-          <div className="text-center py-8">
+          <div className="text-center py-2xl">
             <img 
               src={agentforceLogo} 
               alt="Agentforce" 
-              className="w-16 h-16 object-contain mx-auto mb-4"
+              className="w-16 h-16 object-contain mx-auto mb-lg"
               data-testid="img-agentforce-logo"
             />
-            <h2 className="text-xl font-semibold text-foreground mb-2" data-testid="text-main-title">
+            <h2 className="text-xl font-semibold text-foreground mb-sm" data-testid="text-main-title">
               Talk to AgentForce
             </h2>
             <p className="text-sm text-muted-foreground" data-testid="text-instructions">
@@ -343,8 +343,8 @@ export default function VoiceChat() {
         )}
 
         {isValidatingConversation && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+          <div className="flex items-center justify-center py-2xl">
+            <Loader2 className="w-6 h-6 animate-spin text-primary mr-sm" />
             <span className="text-sm text-muted-foreground">Connecting...</span>
           </div>
         )}
@@ -367,8 +367,8 @@ export default function VoiceChat() {
         )}
 
         {isProcessing && (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+          <div className="flex items-center justify-center py-lg">
+            <Loader2 className="w-6 h-6 animate-spin text-primary mr-sm" />
             <span className="text-sm text-muted-foreground">Processing your voice...</span>
           </div>
         )}
@@ -378,8 +378,8 @@ export default function VoiceChat() {
 
       {/* Voice Interface */}
       {currentView === 'chat' && (
-        <div className="px-6 pt-6 pb-24 border-t border-border bg-background/95 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4">
+        <div className="px-xl pt-xl pb-24 border-t border-border bg-background/95 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-lg">
             <VoiceRecordButton
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
@@ -400,7 +400,7 @@ export default function VoiceChat() {
             
             {/* Text Input Field */}
             {showTextInput && (
-              <div className="w-full max-w-sm flex gap-2">
+              <div className="w-full max-w-sm flex gap-sm">
                 <Input
                   value={textMessage}
                   onChange={(e) => setTextMessage(e.target.value)}
@@ -424,11 +424,11 @@ export default function VoiceChat() {
       
       {/* History View */}
       {currentView === 'history' && (
-        <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
+        <div className="p-xl border-t border-border bg-background/95 backdrop-blur-sm">
           <div className="text-center">
-            <History className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2" data-testid="text-history-title">Conversation History</h3>
-            <p className="text-sm text-muted-foreground mb-4" data-testid="text-history-description">
+            <History className="w-12 h-12 mx-auto mb-lg text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-sm" data-testid="text-history-title">Conversation History</h3>
+            <p className="text-sm text-muted-foreground mb-lg" data-testid="text-history-description">
               Your current conversation is displayed above. 
               {turns.length > 0 ? `You have ${turns.length} messages in this conversation.` : 'No messages yet.'}
             </p>
@@ -446,10 +446,10 @@ export default function VoiceChat() {
 
       {/* Bottom Tab Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border">
-        <div className="flex justify-around py-2 max-w-md mx-auto">
+        <div className="flex justify-around py-sm max-w-md mx-auto">
           <Button 
             variant="ghost" 
-            className="flex flex-col items-center gap-1 py-3 px-4"
+            className="flex flex-col items-center gap-xs py-md px-lg"
             data-testid="button-tab-history"
             onClick={() => {
               console.log('History tab clicked');
