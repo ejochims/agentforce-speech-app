@@ -2,6 +2,38 @@
  * Utility functions for formatting time and dates in a chat interface
  */
 
+/**
+ * Safely converts any date value to an ISO string
+ * Handles Date objects, string dates, and invalid dates gracefully
+ */
+export function toSafeISOString(date: any): string {
+  if (!date) return new Date().toISOString();
+  if (typeof date === 'string') return date;
+  if (date instanceof Date) return date.toISOString();
+  // Try to parse as date if it's some other format
+  try {
+    return new Date(date).toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+}
+
+/**
+ * Safely converts any date value to a Date object
+ * Handles Date objects, string dates, and invalid dates gracefully
+ */
+export function toSafeDate(date: any): Date {
+  if (!date) return new Date();
+  if (date instanceof Date) return date;
+  if (typeof date === 'string') return new Date(date);
+  // Try to parse as date if it's some other format
+  try {
+    return new Date(date);
+  } catch {
+    return new Date();
+  }
+}
+
 export function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);

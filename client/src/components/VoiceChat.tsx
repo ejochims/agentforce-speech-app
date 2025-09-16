@@ -7,9 +7,11 @@ import { apiRequest } from '@/lib/queryClient';
 import VoiceRecordButton from './VoiceRecordButton';
 import AudioVisualizer from './AudioVisualizer';
 import MessageBubble from './MessageBubble';
-import { shouldGroupMessage } from '@/lib/time';
+import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
 import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
 import type { Conversation, Turn } from '@shared/schema';
+
+type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
 export default function VoiceChat() {
   const [isRecording, setIsRecording] = useState(false);
@@ -20,6 +22,8 @@ export default function VoiceChat() {
   const [currentView, setCurrentView] = useState<'chat' | 'history'>('chat');
   const [isValidatingConversation, setIsValidatingConversation] = useState(false);
   const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
+  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -216,7 +220,17 @@ export default function VoiceChat() {
 
   const handleRecordingStart = () => {
     setIsRecording(true);
+    setRecordingState('recording');
+    setRecordingError(null);
     console.log('Voice recording started');
+  };
+
+  const handleRecordingError = (error: string) => {
+    console.error('Recording error:', error);
+    setIsRecording(false);
+    setRecordingState('error');
+    setRecordingError(error);
+    setIsProcessing(false);
   };
 
   const handleTextMessage = async () => {
@@ -250,16 +264,22 @@ export default function VoiceChat() {
     setIsRecording(false);
     console.log('Voice recording stopped', audioBlob?.size, 'bytes');
     
-    if (!audioBlob || !currentConversationId) return;
+    if (!audioBlob || !currentConversationId) {
+      setRecordingState('idle');
+      return;
+    }
     
     // Check if audio blob has data
     if (audioBlob.size === 0 || audioBlob.size < 100) {
       console.error('Audio recording is empty or too small:', audioBlob.size, 'bytes');
-      alert('Recording too short or empty. Please hold the button longer and speak clearly.');
+      setRecordingError('Recording too short or empty. Please hold the button longer and speak clearly.');
+      setRecordingState('error');
       return;
     }
 
+    setRecordingState('processing');
     setIsProcessing(true);
+    
     try {
       // Convert audio to text using STT API
       const formData = new FormData();
@@ -281,7 +301,10 @@ export default function VoiceChat() {
         body: formData,
       });
 
-      if (!sttResponse.ok) throw new Error('STT failed');
+      if (!sttResponse.ok) {
+        const errorText = await sttResponse.text();
+        throw new Error(`STT failed: ${sttResponse.status} ${errorText}`);
+      }
 
       const { text } = await sttResponse.json();
       console.log('Transcribed text:', text);
@@ -297,9 +320,17 @@ export default function VoiceChat() {
           triggerAgent: true,
           pendingId,
         });
+        
+        setRecordingState('idle');
+      } else {
+        setRecordingError('No speech detected. Please speak clearly and try again.');
+        setRecordingState('error');
       }
     } catch (error) {
       console.error('Error processing voice:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process recording';
+      setRecordingError(`Processing failed: ${errorMessage}`);
+      setRecordingState('error');
     } finally {
       setIsProcessing(false);
     }
@@ -416,12 +447,12 @@ export default function VoiceChat() {
                 const nextTurn = index < turns.length - 1 ? turns[index + 1] : null;
                 
                 const isGroupedWithPrevious = shouldGroupMessage(
-                  { role: turn.role, createdAt: turn.createdAt.toISOString() },
-                  previousTurn ? { role: previousTurn.role, createdAt: previousTurn.createdAt.toISOString() } : null
+                  { role: turn.role, createdAt: toSafeISOString(turn.createdAt) },
+                  previousTurn ? { role: previousTurn.role, createdAt: toSafeISOString(previousTurn.createdAt) } : null
                 );
                 const isGroupedWithNext = nextTurn ? shouldGroupMessage(
-                  { role: nextTurn.role, createdAt: nextTurn.createdAt.toISOString() },
-                  { role: turn.role, createdAt: turn.createdAt.toISOString() }
+                  { role: nextTurn.role, createdAt: toSafeISOString(nextTurn.createdAt) },
+                  { role: turn.role, createdAt: toSafeISOString(turn.createdAt) }
                 ) : false;
                 
                 const isFirstInGroup = !isGroupedWithPrevious;
@@ -432,7 +463,7 @@ export default function VoiceChat() {
                     key={turn.id}
                     message={turn.text}
                     isUser={turn.role === 'user'}
-                    timestamp={new Date(turn.createdAt)}
+                    timestamp={toSafeDate(turn.createdAt)}
                     isFirstInGroup={isFirstInGroup}
                     isLastInGroup={isLastInGroup}
                     showAvatar={true}
@@ -445,9 +476,10 @@ export default function VoiceChat() {
               {/* Render pending messages */}
               {Array.from(pendingMessages.entries()).map(([pendingId, pendingMessage]) => {
                 const lastTurn = turns[turns.length - 1];
+                
                 const isGroupedWithPrevious = lastTurn ? shouldGroupMessage(
-                  { role: 'user', createdAt: pendingMessage.timestamp.toISOString() },
-                  { role: lastTurn.role, createdAt: lastTurn.createdAt.toISOString() }
+                  { role: 'user', createdAt: toSafeISOString(pendingMessage.timestamp) },
+                  { role: lastTurn.role, createdAt: toSafeISOString(lastTurn.createdAt) }
                 ) : false;
                 
                 return (
@@ -477,15 +509,6 @@ export default function VoiceChat() {
                   showTimestamp={false}
                 />
               )}
-
-              {isProcessing && (
-                <div className="flex items-center justify-center py-xl">
-                  <div className="flex items-center gap-md">
-                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    <span className="text-sm text-muted-foreground">Processing your voice...</span>
-                  </div>
-                </div>
-              )}
             </div>
           )}
           
@@ -496,52 +519,70 @@ export default function VoiceChat() {
       {/* Voice Composer */}
       {currentView === 'chat' && (
         <footer className="app-footer">
-          <div className="px-lg pt-lg pb-lg">
-            {/* Text Input Field - Show when expanded */}
-            {showTextInput && (
-              <div className="mb-lg">
-                <div className="flex gap-md">
-                  <Input
-                    value={textMessage}
-                    onChange={(e) => setTextMessage(e.target.value)}
-                    placeholder="Type your message..."
-                    onKeyPress={(e) => e.key === 'Enter' && handleTextMessage()}
-                    disabled={isProcessing}
-                    className="flex-1 h-12 rounded-full px-lg text-base"
-                    data-testid="input-text-message"
-                  />
-                  <Button
-                    onClick={handleTextMessage}
-                    disabled={isProcessing || !textMessage.trim()}
-                    size="icon"
-                    className="touch-target w-12 h-12 rounded-full"
-                    data-testid="button-send-text"
-                  >
-                    <Send className="w-5 h-5" />
-                  </Button>
+          <div className="px-lg pt-lg pb-lg keyboard-aware">
+            {/* Unified Composer Layout */}
+            <div className="flex flex-col gap-lg">
+              {/* Text Input Field - Show when expanded */}
+              {showTextInput && (
+                <div className="transition-all duration-300 ease-in-out">
+                  <div className="flex gap-md items-end">
+                    <Input
+                      value={textMessage}
+                      onChange={(e) => setTextMessage(e.target.value)}
+                      placeholder="Type your message..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleTextMessage();
+                        }
+                      }}
+                      disabled={isProcessing || recordingState === 'processing'}
+                      className="flex-1 h-12 rounded-full px-lg text-base touch-target"
+                      data-testid="input-text-message"
+                      aria-label="Type your message"
+                    />
+                    <Button
+                      onClick={handleTextMessage}
+                      disabled={isProcessing || recordingState === 'processing' || !textMessage.trim()}
+                      size="icon"
+                      className="touch-target w-12 h-12 rounded-full hover-elevate active-elevate-2"
+                      data-testid="button-send-text"
+                      aria-label="Send message"
+                    >
+                      <Send className="w-5 h-5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Voice Interface */}
-            <div className="flex flex-col items-center gap-lg">
-              <VoiceRecordButton
-                onRecordingStart={handleRecordingStart}
-                onRecordingStop={handleRecordingStop}
-                disabled={isProcessing || isValidatingConversation}
-              />
+              )}
               
-              {/* Text Input Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowTextInput(!showTextInput)}
-                className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate"
-                data-testid="button-toggle-text-input"
-              >
-                <MessageCircle className="w-4 h-4 mr-sm" />
-                {showTextInput ? 'Hide' : 'Show'} Text Input
-              </Button>
+              {/* Voice Interface */}
+              <div className="flex flex-col items-center gap-lg">
+                <VoiceRecordButton
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
+                  onError={handleRecordingError}
+                  disabled={isValidatingConversation}
+                  state={recordingState}
+                  error={recordingError || undefined}
+                  onRetry={() => {
+                    setRecordingError(null);
+                    setRecordingState('idle');
+                  }}
+                />
+                
+                {/* Text Input Toggle */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowTextInput(!showTextInput)}
+                  className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate transition-all duration-200"
+                  data-testid="button-toggle-text-input"
+                  aria-label={showTextInput ? 'Hide text input' : 'Show text input'}
+                >
+                  <MessageCircle className="w-4 h-4 mr-sm" />
+                  {showTextInput ? 'Hide' : 'Show'} Text Input
+                </Button>
+              </div>
             </div>
           </div>
         </footer>

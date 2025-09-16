@@ -1,24 +1,54 @@
-import { useState, useRef } from 'react';
-import { Mic, MicOff } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Mic, MicOff, AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import AudioVisualizer from './AudioVisualizer';
+
+type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
 interface VoiceRecordButtonProps {
   onRecordingStart?: () => void;
   onRecordingStop?: (audioBlob?: Blob) => void;
+  onError?: (error: string) => void;
   disabled?: boolean;
+  state?: RecordingState;
+  error?: string;
+  onRetry?: () => void;
 }
 
 export default function VoiceRecordButton({ 
   onRecordingStart, 
   onRecordingStop, 
-  disabled = false 
+  onError,
+  disabled = false,
+  state = 'idle',
+  error,
+  onRetry
 }: VoiceRecordButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isSlideToCancel, setIsSlideToCancel] = useState(false);
+
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const startX = useRef<number>(0);
+  const cancelThreshold = 100; // pixels to drag left to cancel
+
+  // Haptic feedback helper
+  const triggerHapticFeedback = (pattern: number | number[]) => {
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (error) {
+        // Silently handle vibration failures
+        console.debug('Vibration not supported or failed:', error);
+      }
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -26,7 +56,9 @@ export default function VoiceRecordButton({
       
       // Check for media device support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('Media devices not supported in this browser');
+        const errorMsg = 'Audio recording is not supported in this browser';
+        console.error(errorMsg);
+        onError?.(errorMsg);
         return;
       }
       
@@ -55,11 +87,16 @@ export default function VoiceRecordButton({
       
       recorder.onstop = () => {
         console.log('MediaRecorder stopped, processing audio...');
-        // Use the actual mime type from MediaRecorder instead of forcing audio/wav
-        const actualMimeType = recorder.mimeType || 'audio/webm';
-        const audioBlob = new Blob(audioChunks.current, { type: actualMimeType });
-        console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
-        onRecordingStop?.(audioBlob);
+        
+        // Only process if we have audio chunks (not cancelled)
+        if (audioChunks.current.length > 0) {
+          // Use the actual mime type from MediaRecorder instead of forcing audio/wav
+          const actualMimeType = recorder.mimeType || 'audio/webm';
+          const audioBlob = new Blob(audioChunks.current, { type: actualMimeType });
+          console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
+          onRecordingStop?.(audioBlob);
+        }
+        
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -75,24 +112,67 @@ export default function VoiceRecordButton({
         setRecordingDuration(duration);
       }, 100);
       
+      // Trigger haptic feedback on successful recording start
+      triggerHapticFeedback(10);
+      
       onRecordingStart?.();
       console.log('Recording started successfully');
     } catch (error) {
       console.error('Error starting recording:', error);
-      // Still call the start handler to show UI feedback even if recording fails
-      onRecordingStart?.();
+      
+      // Handle different types of recording errors
+      let errorMessage = 'Recording failed';
+      
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
+        } else if (error.name === 'NotFoundError' || error.name === 'DeviceNotFoundError') {
+          errorMessage = 'No microphone found. Please check your audio device and try again.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+          errorMessage = 'Microphone is busy or not accessible. Please close other apps using the microphone and try again.';
+        } else {
+          errorMessage = error.message || errorMessage;
+        }
+      }
+      
+      // CRITICAL FIX: Do NOT call onRecordingStart when there's an error
+      // Instead, surface the error properly
+      onError?.(errorMessage);
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = useCallback((cancelled: boolean = false) => {
     if (mediaRecorder.current && isRecording) {
       const recordingTime = Date.now() - startTimeRef.current;
-      console.log(`Stopping recording after ${recordingTime}ms...`);
+      console.log(`${cancelled ? 'Cancelling' : 'Stopping'} recording after ${recordingTime}ms...`);
+      
+      // Trigger haptic feedback
+      if (cancelled) {
+        triggerHapticFeedback([50, 100, 50]); // Pattern for cancellation
+      } else {
+        triggerHapticFeedback(20); // Slightly longer for successful stop
+      }
       
       // Clear duration interval
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
         durationIntervalRef.current = null;
+      }
+      
+      // Reset drag state
+      setDragOffset(0);
+      setIsDragging(false);
+      setIsSlideToCancel(false);
+      
+      if (cancelled) {
+        // Clear audio chunks to prevent processing
+        audioChunks.current = [];
+        // Just stop the recorder without processing
+        mediaRecorder.current.stop();
+        setIsRecording(false);
+        setRecordingDuration(0);
+        console.log('Recording cancelled');
+        return;
       }
       
       // Check if recording is too short
@@ -105,49 +185,233 @@ export default function VoiceRecordButton({
       setRecordingDuration(0);
       console.log('Recording stopped');
     }
-  };
+  }, [isRecording]);
 
   const handleToggleRecording = () => {
-    if (disabled) return;
+    if (disabled || state === 'processing') return;
+    
+    if (state === 'error' && onRetry) {
+      onRetry();
+      return;
+    }
     
     if (isRecording) {
-      stopRecording();
+      stopRecording(false);
     } else {
       startRecording();
     }
   };
+  
+  // Touch/mouse event handlers for slide-to-cancel
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (disabled || state === 'processing') return;
+    
+    if (state === 'error' && onRetry) {
+      onRetry();
+      return;
+    }
+    
+    e.preventDefault();
+    buttonRef.current?.setPointerCapture(e.pointerId);
+    startX.current = e.clientX;
+    setIsDragging(false);
+    
+    if (!isRecording) {
+      startRecording();
+    }
+  };
+  
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isRecording || disabled) return;
+    
+    const deltaX = e.clientX - startX.current;
+    setDragOffset(Math.min(0, deltaX)); // Only allow dragging left
+    
+    if (Math.abs(deltaX) > 10) {
+      setIsDragging(true);
+    }
+    
+    const shouldCancel = deltaX < -cancelThreshold;
+    const wasSlideToCancel = isSlideToCancel;
+    setIsSlideToCancel(shouldCancel);
+    
+    // Haptic feedback when crossing slide-to-cancel threshold
+    if (shouldCancel && !wasSlideToCancel) {
+      triggerHapticFeedback(30); // Strong feedback when entering cancel zone
+    }
+  };
+  
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isRecording) return;
+    
+    e.preventDefault();
+    buttonRef.current?.releasePointerCapture(e.pointerId);
+    
+    if (isSlideToCancel) {
+      stopRecording(true); // Cancel the recording
+    } else {
+      stopRecording(false); // Normal stop
+    }
+  };
+  
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-  return (
-    <div className="flex flex-col items-center gap-sm">
-      <Button
-        size="icon"
-        disabled={disabled}
-        className={`
-          w-20 h-20 rounded-full transition-all duration-200 
-          ${isRecording 
-            ? 'bg-recording-active text-recording-active-foreground border-2 border-recording-active/30 shadow-lg shadow-recording-active/20 animate-pulse hover:bg-recording-active/90' 
-            : 'bg-voice-primary text-voice-primary-foreground hover:bg-voice-primary/90'
-          }
-          ${disabled ? 'bg-recording-inactive text-recording-inactive-foreground hover:bg-recording-inactive/90' : ''}
-        `}
-        onClick={handleToggleRecording}
-        data-testid="button-voice-record"
-      >
-        {isRecording ? (
-          <MicOff className="w-8 h-8" />
-        ) : (
-          <Mic className="w-8 h-8" />
-        )}
-      </Button>
-      
-      <p className="text-sm text-muted-foreground font-medium">
-        {isRecording 
-          ? `Recording... ${recordingDuration}s` 
-          : disabled 
-            ? 'Recording disabled'
-            : 'Tap to record'
+  const getButtonClassName = () => {
+    const baseClasses = 'w-20 h-20 rounded-full transition-all duration-300 relative overflow-visible touch-target';
+    
+    if (disabled) {
+      return `${baseClasses} bg-recording-inactive text-recording-inactive-foreground cursor-not-allowed`;
+    }
+    
+    switch (state) {
+      case 'recording':
+        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-lg shadow-recording-active/20 ${!isSlideToCancel ? 'animate-pulse' : ''}`;
+      case 'processing':
+        return `${baseClasses} bg-voice-processing text-voice-processing-foreground cursor-wait`;
+      case 'error':
+        return `${baseClasses} bg-voice-error text-voice-error-foreground hover-elevate`;
+      default:
+        return `${baseClasses} bg-voice-primary text-voice-primary-foreground hover-elevate active-elevate-2`;
+    }
+  };
+  
+  const getStatusText = () => {
+    if (disabled) return 'Recording disabled';
+    
+    switch (state) {
+      case 'recording':
+        if (isSlideToCancel) {
+          return 'Release to cancel';
         }
-      </p>
+        return `Recording... ${formatDuration(recordingDuration)}`;
+      case 'processing':
+        return 'Processing audio...';
+      case 'error':
+        return error || 'Recording failed • Tap to retry';
+      default:
+        return 'Hold to record';
+    }
+  };
+  
+  const getIcon = () => {
+    switch (state) {
+      case 'recording':
+        return isSlideToCancel ? <MicOff className="w-8 h-8" /> : <MicOff className="w-8 h-8" />;
+      case 'processing':
+        return <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" />;
+      case 'error':
+        return <AlertCircle className="w-8 h-8" />;
+      default:
+        return <Mic className="w-8 h-8" />;
+    }
+  };
+  
+  return (
+    <div className="flex flex-col items-center gap-lg">
+      {/* Screen reader announcements for accessibility */}
+      <div 
+        aria-live="polite" 
+        aria-atomic="true"
+        className="sr-only"
+        role="status"
+        data-testid="voice-record-status-announcer"
+      >
+        {getStatusText()}
+      </div>
+      
+      {/* Audio Visualizer - Show during recording */}
+      {state === 'recording' && (
+        <div className="transition-all duration-300" role="img" aria-label="Audio visualization showing voice input levels">
+          <AudioVisualizer isActive={true} height={32} />
+        </div>
+      )}
+      
+      {/* Recording Button */}
+      <div className="relative flex flex-col items-center">
+        {/* Slide to cancel indicator */}
+        {isDragging && (
+          <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 px-lg py-sm bg-muted/90 backdrop-blur-sm rounded-full text-sm text-muted-foreground font-medium whitespace-nowrap transition-all duration-200">
+            {isSlideToCancel ? '← Release to cancel' : '← Slide to cancel'}
+          </div>
+        )}
+        
+        {/* Screen reader instructions for slide-to-cancel (only announce when recording) */}
+        {state === 'recording' && (
+          <div 
+            aria-live="polite" 
+            className="sr-only"
+            role="status"
+          >
+            {isDragging && isSlideToCancel 
+              ? 'Release to cancel recording' 
+              : isDragging 
+              ? 'Slide left to cancel recording'
+              : 'Recording in progress. Slide left and release to cancel.'}
+          </div>
+        )}
+        
+        <Button
+          ref={buttonRef}
+          size="icon"
+          disabled={disabled}
+          className={getButtonClassName()}
+          style={{
+            transform: `translateX(${dragOffset}px)`,
+            transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+          }}
+          onClick={handleToggleRecording}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          data-testid="button-voice-record"
+          aria-label={getStatusText()}
+          aria-pressed={state === 'recording'}
+          aria-describedby={state === 'recording' ? 'recording-instructions' : undefined}
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+        >
+          {getIcon()}
+          
+          {/* Pulse ring animation for recording state */}
+          {state === 'recording' && !isSlideToCancel && (
+            <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-ping opacity-75" />
+          )}
+        </Button>
+      </div>
+      
+      {/* Status Text */}
+      <div className="text-center">
+        <p 
+          id="recording-instructions"
+          className={`text-sm font-medium transition-colors duration-200 ${
+            state === 'error' 
+              ? 'text-destructive' 
+              : state === 'recording' && isSlideToCancel
+              ? 'text-warning'
+              : 'text-muted-foreground'
+          }`}
+        >
+          {getStatusText()}
+        </p>
+        
+        {/* Additional error details */}
+        {state === 'error' && error && (
+          <p className="text-xs text-muted-foreground mt-xs" role="alert">
+            {error}
+          </p>
+        )}
+        
+        {/* Hidden instructions for screen readers */}
+        {state === 'recording' && (
+          <p className="sr-only" aria-live="polite">
+            Hold and speak to record your message. Slide left to cancel recording.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
