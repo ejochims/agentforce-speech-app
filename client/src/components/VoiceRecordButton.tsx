@@ -154,12 +154,15 @@ export default function VoiceRecordButton({
         )}
       </Button>
       
-      <p className="text-sm text-muted-foreground font-medium">
-        {isRecording 
-          ? `Recording... ${recordingDuration}s ${recordingDuration < 1 ? '(hold longer)' : ''}` 
-          : 'Hold to speak (at least 1 second)'
-        }
-      </p>
+      {/* Fixed height container to prevent layout shifts */}
+      <div className="h-5 flex items-center justify-center text-center">
+        <p className="text-sm text-muted-foreground font-medium whitespace-nowrap">
+          {isRecording 
+            ? `Recording... ${recordingDuration}s ${recordingDuration < 1 ? '(hold longer)' : ''}` 
+            : 'Hold to speak (at least 1 second)'
+          }
+        </p>
+      </div>
     </div>
   );
 }
