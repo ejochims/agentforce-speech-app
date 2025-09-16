@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentforce Voice</title>
+    <style>
+        :root {
+            /* Colors */
+            --bg-start: #F2F6FF;
+            --bg-end: #FFFFFF;
+            --bg-dark-start: #0B1220;
+            --bg-dark-end: #0E1426;
+            --title-color: #1E40AF;
+            --headline-color: #0F172A;
+            --subtext-color: rgba(71, 85, 105, 0.8);
+            --card-bg: #FFFFFF;
+            --card-dark-bg: #0F172A;
+            --primary-blue: #3B82F6;
+            --primary-blue-dark: #2563EB;
+            --primary-blue-light: #60A5FA;
+            --mic-container-bg: #EEF2FF;
+            --red-start: #EF4444;
+            --red-end: #DC2626;
+            --gray-mute: #E5E7EB;
+            --text-light: #FFFFFF;
+            
+            /* Spacing */
+            --spacing-xs: 8px;
+            --spacing-sm: 16px;
+            --spacing-md: 24px;
+            --spacing-lg: 32px;
+            --spacing-xl: 48px;
+            
+            /* Radii */
+            --radius-card: 24px;
+            --radius-button: 50%;
+            --radius-tab: 20px;
+            
+            /* Shadows */
+            --card-shadow: 0 8px 24px rgba(2, 23, 61, 0.08);
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-start: var(--bg-dark-start);
+                --bg-end: var(--bg-dark-end);
+                --card-bg: var(--card-dark-bg);
+                --headline-color: #F8FAFC;
+                --subtext-color: rgba(148, 163, 184, 0.8);
+                --primary-blue: var(--primary-blue-light);
+                --title-color: var(--primary-blue-light);
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+            background: linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+            min-height: 100vh;
+            padding: env(safe-area-inset-top, var(--spacing-md)) var(--spacing-sm) env(safe-area-inset-bottom, var(--spacing-md));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 430px;
+            margin: 0 auto;
+        }
+        
+        .container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+        
+        .title {
+            color: var(--title-color);
+            font-size: 28px;
+            font-weight: 600;
+            margin-top: var(--spacing-lg);
+            margin-bottom: var(--spacing-xl);
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius-card);
+            box-shadow: var(--card-shadow);
+            padding: var(--spacing-xl) var(--spacing-md);
+            width: 100%;
+            max-width: 360px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: var(--spacing-xl);
+        }
+        
+        .mic-container {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--mic-container-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .mic-icon {
+            width: 32px;
+            height: 32px;
+            color: var(--primary-blue);
+        }
+        
+        .headline {
+            color: var(--headline-color);
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: var(--spacing-xs);
+            text-align: center;
+        }
+        
+        .subtext {
+            color: var(--subtext-color);
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+            line-height: 1.4;
+        }
+        
+        .primary-mic-button {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin-bottom: var(--spacing-sm);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transition: transform 0.1s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .primary-mic-button:focus {
+            outline: 2px solid var(--primary-blue);
+            outline-offset: 2px;
+        }
+        
+        .primary-mic-button.pressed {
+            transform: scale(0.96);
+        }
+        
+        .primary-mic-button::before,
+        .primary-mic-button::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid var(--primary-blue);
+            opacity: 0;
+        }
+        
+        .primary-mic-button.pulsing::before {
+            width: 100px;
+            height: 100px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .primary-mic-button.pulsing::after {
+            width: 120px;
+            height: 120px;
+            animation: pulse 1.5s infinite 0.5s;
+        }
+        
+        @keyframes pulse {
+            0% {
+                opacity: 0.8;
+                transform: scale(0.8);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(1.2);
+            }
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            .primary-mic-button::before,
+            .primary-mic-button::after {
+                animation: none;
+            }
+        }
+        
+        .mic-button-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--text-light);
+        }
+        
+        .mic-label {
+            color: var(--subtext-color);
+            font-size: 14px;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .action-buttons {
+            display: flex;
+            justify-content: space-evenly;
+            width: 100%;
+            max-width: 240px;
+            margin-bottom: var(--spacing-xl);
+        }
+        
+        .action-button {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s ease;
+        }
+        
+        .action-button:focus {
+            outline: 2px solid var(--primary-blue);
+            outline-offset: 2px;
+        }
+        
+        .action-button:active {
+            transform: scale(0.95);
+        }
+        
+        .end-button {
+            background: linear-gradient(180deg, var(--red-start) 0%, var(--red-end) 100%);
+        }
+        
+        .mute-button {
+            background: var(--gray-mute);
+        }
+        
+        .mute-button.unmuted {
+            background: var(--primary-blue);
+        }
+        
+        .profile-button {
+            background: var(--primary-blue-dark);
+        }
+        
+        .action-icon {
+            width: 20px;
+            height: 20px;
+            color: var(--text-light);
+        }
+        
+        .mute-button .action-icon {
+            color: #374151;
+        }
+        
+        .mute-button.unmuted .action-icon {
+            color: var(--text-light);
+        }
+        
+        .tab-bar {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            border-radius: var(--radius-tab);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            display: flex;
+            gap: var(--spacing-lg);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            .tab-bar {
+                background: rgba(15, 23, 42, 0.8);
+            }
+        }
+        
+        .tab-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: var(--spacing-xs);
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: #9CA3AF;
+            font-size: 12px;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+        
+        .tab-item.active {
+            color: var(--primary-blue);
+        }
+        
+        .tab-item:focus {
+            outline: 2px solid var(--primary-blue);
+            outline-offset: 2px;
+            border-radius: 8px;
+        }
+        
+        .tab-icon {
+            width: 24px;
+            height: 24px;
+        }
+        
+        .content-pane {
+            display: none;
+        }
+        
+        .content-pane.active {
+            display: block;
+        }
+        
+        .placeholder-content {
+            text-align: center;
+            color: var(--subtext-color);
+            padding: var(--spacing-lg);
+        }
+        
+        @media (max-width: 360px) {
+            .card {
+                padding: var(--spacing-md) var(--spacing-sm);
+            }
+            
+            .action-buttons {
+                max-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Agentforce</h1>
+        
+        <div class="card">
+            <div class="mic-container">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C13.1 2 14 2.9 14 4V10C14 11.1 13.1 12 12 12C10.9 12 10 11.1 10 10V4C10 2.9 10.9 2 12 2M19 10V12C19 15.9 15.9 19 12 19S5 15.9 5 12V10H7V12C7 14.8 9.2 17 12 17S17 14.8 17 12V10H19M12 20.5C12.3 20.5 12.5 20.7 12.5 21V22H11.5V21C11.5 20.7 11.7 20.5 12 20.5Z"/>
+                </svg>
+            </div>
+            
+            <h2 class="headline">Talk to AgentForce</h2>
+            <p class="subtext">Hold the button below to talk to AgentForce</p>
+            
+            <button class="primary-mic-button" id="primaryMic" aria-label="Press and hold to speak">
+                <svg class="mic-button-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C13.1 2 14 2.9 14 4V10C14 11.1 13.1 12 12 12C10.9 12 10 11.1 10 10V4C10 2.9 10.9 2 12 2M19 10V12C19 15.9 15.9 19 12 19S5 15.9 5 12V10H7V12C7 14.8 9.2 17 12 17S17 14.8 17 12V10H19M12 20.5C12.3 20.5 12.5 20.7 12.5 21V22H11.5V21C11.5 20.7 11.7 20.5 12 20.5Z"/>
+                </svg>
+            </button>
+            
+            <div class="mic-label" id="micLabel">Hold to speak</div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="action-button end-button" aria-label="End call">
+                <svg class="action-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12,9C10.5,9 8.31,9.43 6.11,10.17C5.45,10.35 5,10.92 5,11.6V13.4C5,14.6 5.4,15.1 6.1,15.1L8.5,15.1C9.3,15.1 10,14.4 10,13.6V12.4C10,11.6 10.7,10.9 11.5,10.9H12.5C13.3,10.9 14,11.6 14,12.4V13.6C14,14.4 14.7,15.1 15.5,15.1H17.9C18.6,15.1 19,14.6 19,13.4V11.6C19,10.92 18.55,10.35 17.89,10.17C15.69,9.43 13.5,9 12,9Z"/>
+                </svg>
+            </button>
+            
+            <button class="action-button mute-button" id="muteButton" aria-label="Toggle mute" aria-pressed="false">
+                <svg class="action-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C13.1 2 14 2.9 14 4V10C14 11.1 13.1 12 12 12C10.9 12 10 11.1 10 10V4C10 2.9 10.9 2 12 2M19 10V12C19 15.9 15.9 19 12 19S5 15.9 5 12V10H7V12C7 14.8 9.2 17 12 17S17 14.8 17 12V10H19M12 20.5C12.3 20.5 12.5 20.7 12.5 21V22H11.5V21C11.5 20.7 11.7 20.5 12 20.5Z"/>
+                </svg>
+            </button>
+            
+            <button class="action-button profile-button" aria-label="Profile">
+                <svg class="action-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+    
+    <div class="tab-bar">
+        <button class="tab-item active" id="voiceTab" aria-label="Voice tab">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C13.1 2 14 2.9 14 4V10C14 11.1 13.1 12 12 12C10.9 12 10 11.1 10 10V4C10 2.9 10.9 2 12 2M19 10V12C19 15.9 15.9 19 12 19S5 15.9 5 12V10H7V12C7 14.8 9.2 17 12 17S17 14.8 17 12V10H19M12 20.5C12.3 20.5 12.5 20.7 12.5 21V22H11.5V21C11.5 20.7 11.7 20.5 12 20.5Z"/>
+            </svg>
+            <span>Voice</span>
+        </button>
+        
+        <button class="tab-item" id="historyTab" aria-label="History tab">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3"/>
+            </svg>
+            <span>History</span>
+        </button>
+        
+        <button class="tab-item" id="settingsTab" aria-label="Settings tab">
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+            </svg>
+            <span>Settings</span>
+        </button>
+    </div>
+
+    <script>
+        // Primary mic button interactions
+        const primaryMic = document.getElementById('primaryMic');
+        const micLabel = document.getElementById('micLabel');
+        let isPressed = false;
+        
+        function startListening() {
+            if (!isPressed) {
+                isPressed = true;
+                primaryMic.classList.add('pressed', 'pulsing');
+                micLabel.textContent = 'Listening…';
+            }
+        }
+        
+        function stopListening() {
+            if (isPressed) {
+                isPressed = false;
+                primaryMic.classList.remove('pressed', 'pulsing');
+                micLabel.textContent = 'Hold to speak';
+            }
+        }
+        
+        // Mouse events
+        primaryMic.addEventListener('mousedown', startListening);
+        primaryMic.addEventListener('mouseup', stopListening);
+        primaryMic.addEventListener('mouseleave', stopListening);
+        
+        // Touch events
+        primaryMic.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startListening();
+        });
+        primaryMic.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopListening();
+        });
+        primaryMic.addEventListener('touchcancel', stopListening);
+        
+        // Mute button toggle
+        const muteButton = document.getElementById('muteButton');
+        let isMuted = false;
+        
+        muteButton.addEventListener('click', () => {
+            isMuted = !isMuted;
+            muteButton.classList.toggle('unmuted');
+            muteButton.setAttribute('aria-pressed', isMuted.toString());
+        });
+        
+        // Tab switching
+        const tabs = document.querySelectorAll('.tab-item');
+        const voiceContent = document.querySelector('.container');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs
+                tabs.forEach(t => t.classList.remove('active'));
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                
+                // Show appropriate content
+                if (tab.id === 'voiceTab') {
+                    voiceContent.style.display = 'flex';
+                    // Hide any placeholder content
+                    document.querySelectorAll('.placeholder-content').forEach(p => p.remove());
+                } else {
+                    voiceContent.style.display = 'none';
+                    showPlaceholderContent(tab.id);
+                }
+            });
+        });
+        
+        function showPlaceholderContent(tabId) {
+            // Remove existing placeholder
+            document.querySelectorAll('.placeholder-content').forEach(p => p.remove());
+            
+            // Create new placeholder
+            const placeholder = document.createElement('div');
+            placeholder.className = 'placeholder-content';
+            placeholder.style.position = 'fixed';
+            placeholder.style.top = '50%';
+            placeholder.style.left = '50%';
+            placeholder.style.transform = 'translate(-50%, -50%)';
+            placeholder.style.zIndex = '1000';
+            
+            if (tabId === 'historyTab') {
+                placeholder.innerHTML = '<h2>History</h2><p>Your conversation history will appear here.</p>';
+            } else if (tabId === 'settingsTab') {
+                placeholder.innerHTML = '<h2>Settings</h2><p>App settings and preferences will be available here.</p>';
+            }
+            
+            document.body.appendChild(placeholder);
+        }
+    </script>
+</body>
+</html>
