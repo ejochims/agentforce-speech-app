@@ -153,6 +153,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Text-to-Speech - Streaming version for faster playback
+  app.get('/api/tts', async (req, res) => {
+    try {
+      const { text, voice = 'shimmer' } = req.query;
+      
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ error: 'Text is required' });
+      }
+
+      const mp3 = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: voice as string,
+        input: text,
+      });
+
+      // Stream the response directly without buffering
+      res.set({
+        'Content-Type': 'audio/mpeg',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+      });
+      
+      // Convert ReadableStream to Node.js stream for piping
+      const stream = mp3.body;
+      if (stream) {
+        const reader = stream.getReader();
+        const pump = (): Promise<void> => {
+          return reader.read().then(({ done, value }) => {
+            if (done) {
+              res.end();
+              return;
+            }
+            res.write(value);
+            return pump();
+          });
+        };
+        pump().catch((error: any) => {
+          console.error('TTS streaming error:', error);
+          res.status(500).json({ error: 'Streaming failed' });
+        });
+      } else {
+        throw new Error('No audio stream received from OpenAI');
+      }
+    } catch (error) {
+      console.error('Error generating speech:', error);
+      res.status(500).json({ error: 'Failed to generate speech' });
+    }
+  });
+  
+  // Keep POST endpoint for backward compatibility
   app.post('/api/tts', async (req, res) => {
     try {
       const { text, voice = 'shimmer' } = req.body;

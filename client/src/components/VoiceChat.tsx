@@ -81,14 +81,15 @@ export default function VoiceChat() {
       apiRequest('/api/agentforce', { method: 'POST', body: { text, conversationId } }),
     onSuccess: (response: { text: string; conversationId: string }) => {
       if (currentConversationId) {
+        // Start TTS immediately for faster playback - don't wait for UI updates
+        playTextAsAudio(response.text);
+        
+        // Create turn in parallel (UI update can happen while audio starts)
         createTurn({
           conversationId: currentConversationId,
           role: 'assistant',
           text: response.text,
         });
-        
-        // Play the response as speech
-        playTextAsAudio(response.text);
       }
     },
   });
@@ -184,23 +185,23 @@ export default function VoiceChat() {
 
   const playTextAsAudio = async (text: string) => {
     try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: 'shimmer' }),
+      // Use a unique URL with query params to enable audio streaming
+      const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=shimmer&_t=${Date.now()}`;
+      
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.src = audioUrl;
+      
+      // Start playing as soon as enough data is available
+      audio.addEventListener('canplay', () => {
+        audio.play().catch(console.error);
       });
-
-      if (!response.ok) throw new Error('TTS failed');
-
-      const audioBuffer = await response.arrayBuffer();
-      const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(audioBlob);
       
-      const audio = new Audio(audioUrl);
-      audio.play().catch(console.error);
+      // Handle any playback errors
+      audio.addEventListener('error', (e) => {
+        console.error('Audio playback error:', e);
+      });
       
-      // Clean up URL after playback
-      audio.onended = () => URL.revokeObjectURL(audioUrl);
     } catch (error) {
       console.error('Error playing audio:', error);
     }
