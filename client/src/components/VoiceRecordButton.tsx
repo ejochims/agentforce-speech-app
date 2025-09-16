@@ -127,30 +127,39 @@ export default function VoiceRecordButton({
   };
 
   return (
-    <Button
-      size="icon"
-      disabled={disabled}
-      className={`
-        w-20 h-20 rounded-full transition-all duration-200 
-        ${isRecording 
-          ? 'bg-recording-active border-2 border-recording-active/30 shadow-lg shadow-recording-active/20' 
-          : 'bg-voice-primary hover:bg-voice-primary/90'
+    <div className="flex flex-col items-center gap-2">
+      <Button
+        size="icon"
+        disabled={disabled}
+        className={`
+          w-20 h-20 rounded-full transition-all duration-200 
+          ${isRecording 
+            ? 'bg-recording-active border-2 border-recording-active/30 shadow-lg shadow-recording-active/20' 
+            : 'bg-voice-primary hover:bg-voice-primary/90'
+          }
+          ${isPressed ? 'scale-95' : 'scale-100'}
+          ${isRecording ? 'animate-pulse' : ''}
+        `}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        data-testid="button-voice-record"
+      >
+        {isRecording ? (
+          <MicOff className="w-8 h-8 text-white" />
+        ) : (
+          <Mic className="w-8 h-8 text-white" />
+        )}
+      </Button>
+      
+      <p className="text-sm text-muted-foreground font-medium">
+        {isRecording 
+          ? `Recording... ${recordingDuration}s ${recordingDuration < 1 ? '(hold longer)' : ''}` 
+          : 'Hold to speak'
         }
-        ${isPressed ? 'scale-95' : 'scale-100'}
-        ${isRecording ? 'animate-pulse' : ''}
-      `}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      data-testid="button-voice-record"
-    >
-      {isRecording ? (
-        <MicOff className="w-8 h-8 text-white" />
-      ) : (
-        <Mic className="w-8 h-8 text-white" />
-      )}
-    </Button>
+      </p>
+    </div>
   );
 }

@@ -289,8 +289,6 @@ export default function VoiceChat() {
       {currentView === 'chat' && (
         <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
-            <AudioVisualizer isActive={isRecording} />
-            
             <VoiceRecordButton
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
