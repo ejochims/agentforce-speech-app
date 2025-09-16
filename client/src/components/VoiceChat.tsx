@@ -3,7 +3,7 @@ import { Mic, Phone, Settings, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VoiceRecordButton from './VoiceRecordButton';
 import AudioVisualizer from './AudioVisualizer';
-import agentforceLogo from '@assets/agentforce-1080x608-2_1758045639671.png';
+import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
 
 export default function VoiceChat() {
   const [isRecording, setIsRecording] = useState(false);
@@ -27,14 +27,12 @@ export default function VoiceChat() {
       {/* Header */}
       <div className="text-center py-6">
         <div className="flex items-center justify-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center p-0.5">
-            <img 
-              src={agentforceLogo} 
-              alt="Agentforce" 
-              className="w-full h-full object-contain"
-              data-testid="img-header-logo"
-            />
-          </div>
+          <img 
+            src={agentforceLogo} 
+            alt="Agentforce" 
+            className="w-10 h-10 object-contain"
+            data-testid="img-header-logo"
+          />
           <h1 className="text-2xl font-semibold text-primary" data-testid="text-agentforce-title">
             Agentforce
           </h1>
@@ -46,14 +44,12 @@ export default function VoiceChat() {
         <div className="bg-card border border-card-border rounded-3xl p-8 mx-auto max-w-sm shadow-sm">
           {/* Agentforce Logo */}
           <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center p-1">
-              <img 
-                src={agentforceLogo} 
-                alt="Agentforce" 
-                className="w-full h-full object-contain"
-                data-testid="img-agentforce-logo"
-              />
-            </div>
+            <img 
+              src={agentforceLogo} 
+              alt="Agentforce" 
+              className="w-20 h-20 object-contain"
+              data-testid="img-agentforce-logo"
+            />
           </div>
 
           {/* Title and Instructions */}
