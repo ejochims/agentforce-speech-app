@@ -32,7 +32,7 @@ export default function VoiceChat() {
 
       {/* Main Voice Interface Card */}
       <div className="px-6 pb-8">
-        <div className="bg-card border border-card-border rounded-3xl p-8 mx-auto max-w-sm shadow-sm mb-8">
+        <div className="bg-card border border-card-border rounded-3xl p-8 mx-auto max-w-sm shadow-sm">
           {/* Microphone Icon */}
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
@@ -41,7 +41,7 @@ export default function VoiceChat() {
           </div>
 
           {/* Title and Instructions */}
-          <div className="text-center">
+          <div className="text-center mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-2" data-testid="text-main-title">
               Talk to AgentForce
             </h2>
@@ -49,22 +49,20 @@ export default function VoiceChat() {
               Hold the button below to talk to AgentForce
             </p>
           </div>
-        </div>
 
-        {/* Main Voice Button - Outside the card */}
-        <div className="flex flex-col items-center mb-8">
-          <VoiceRecordButton
-            onRecordingStart={handleRecordingStart}
-            onRecordingStop={handleRecordingStop}
-          />
-          <p className="text-sm text-muted-foreground mt-4" data-testid="text-hold-instruction">
-            Hold to speak
-          </p>
-        </div>
+          {/* Audio Visualizer */}
+          <div className="mb-6">
+            <AudioVisualizer isActive={isRecording} height={32} />
+          </div>
 
-        {/* Audio Visualizer */}
-        <div className="mb-6">
-          <AudioVisualizer isActive={isRecording} height={32} />
+          {/* Main Voice Button */}
+          <div className="flex justify-center mb-6">
+            <VoiceRecordButton
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+            />
+          </div>
+
         </div>
       </div>
 
