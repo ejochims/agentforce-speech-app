@@ -149,7 +149,17 @@ export default function VoiceChat() {
     try {
       // Convert audio to text using STT API
       const formData = new FormData();
-      const fileExtension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
+      // Determine proper file extension based on actual MIME type
+      let fileExtension = 'wav'; // default fallback
+      if (audioBlob.type.includes('webm')) {
+        fileExtension = 'webm';
+      } else if (audioBlob.type.includes('mp4')) {
+        fileExtension = 'm4a'; // Use m4a for mp4 audio, which OpenAI supports better
+      } else if (audioBlob.type.includes('ogg')) {
+        fileExtension = 'ogg';
+      }
+      
+      console.log('Sending audio file:', `recording.${fileExtension}`, 'with type:', audioBlob.type);
       formData.append('audio', audioBlob, `recording.${fileExtension}`);
 
       const sttResponse = await fetch('/api/stt', {

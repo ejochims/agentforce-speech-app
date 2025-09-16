@@ -33,8 +33,16 @@ export default function VoiceRecordButton({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('Got media stream:', stream);
       
-      const recorder = new MediaRecorder(stream);
-      console.log('Created MediaRecorder:', recorder);
+      // Force webm format for better compatibility with OpenAI Whisper
+      const options: MediaRecorderOptions = {};
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        options.mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        options.mimeType = 'audio/webm';
+      }
+      
+      const recorder = new MediaRecorder(stream, options);
+      console.log('Created MediaRecorder:', recorder, 'with options:', options);
       
       audioChunks.current = [];
       
