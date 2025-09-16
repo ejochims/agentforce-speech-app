@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock } from 'lucide-react';
+import { 
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,7 +29,7 @@ export default function VoiceChat() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showTextInput, setShowTextInput] = useState(false);
   const [textMessage, setTextMessage] = useState('');
-  const [currentView, setCurrentView] = useState<'chat' | 'history'>('chat');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isValidatingConversation, setIsValidatingConversation] = useState(false);
   const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
@@ -79,6 +89,12 @@ export default function VoiceChat() {
   const { data: turns = [], isLoading: turnsLoading } = useQuery<Turn[]>({
     queryKey: ['/api/conversations', currentConversationId, 'turns'],
     enabled: !!currentConversationId && !isValidatingConversation,
+  });
+
+  // Get all conversations for history
+  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
+    queryKey: ['/api/conversations'],
+    enabled: true,
   });
 
   // Create conversation mutation with retry logic
@@ -379,6 +395,100 @@ export default function VoiceChat() {
           
           {/* Header Actions */}
           <div className="flex items-center gap-sm">
+            <Drawer open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+              <DrawerTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="touch-target w-11 h-11 rounded-full"
+                  data-testid="button-history"
+                  aria-label="View conversation history"
+                >
+                  <History className="w-5 h-5" />
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent className="max-h-[85vh]">
+                <DrawerHeader className="text-center">
+                  <DrawerTitle className="text-xl font-semibold">Conversation History</DrawerTitle>
+                  <DrawerDescription className="text-muted-foreground">
+                    Your recent conversations and chat history
+                  </DrawerDescription>
+                </DrawerHeader>
+                
+                <div className="px-lg pb-lg overflow-y-auto max-h-[calc(85vh-120px)]">
+                  {conversationsLoading ? (
+                    <div className="flex items-center justify-center py-xl">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                      <span className="ml-md text-muted-foreground">Loading conversations...</span>
+                    </div>
+                  ) : conversations.length === 0 ? (
+                    <div className="text-center py-xl">
+                      <History className="w-12 h-12 text-muted-foreground mx-auto mb-lg" />
+                      <h3 className="text-lg font-medium mb-md">No conversations yet</h3>
+                      <p className="text-muted-foreground text-sm">
+                        Start your first conversation to see it appear here
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-md">
+                      {conversations.map((conversation) => {
+                        const isCurrentConversation = conversation.id === currentConversationId;
+                        const lastActivity = new Date(conversation.updatedAt || conversation.createdAt);
+                        
+                        return (
+                          <Card 
+                            key={conversation.id} 
+                            className={`hover-elevate cursor-pointer transition-all duration-200 ${
+                              isCurrentConversation ? 'ring-2 ring-primary/20 border-primary/30' : ''
+                            }`}
+                            onClick={() => {
+                              if (!isCurrentConversation) {
+                                setCurrentConversationId(conversation.id);
+                                localStorage.setItem('currentConversationId', conversation.id);
+                                queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+                              }
+                              setIsHistoryOpen(false);
+                            }}
+                            data-testid={`card-conversation-${conversation.id}`}
+                          >
+                            <CardContent className="p-lg">
+                              <div className="flex items-start justify-between gap-md">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-sm mb-sm">
+                                    <h4 className="font-medium text-foreground truncate">
+                                      {conversation.title}
+                                    </h4>
+                                    {isCurrentConversation && (
+                                      <Badge variant="secondary" className="text-xs px-sm py-0.5">
+                                        Current
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-md text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-xs">
+                                      <Clock className="w-3 h-3" />
+                                      <span>
+                                        {lastActivity.toLocaleDateString()} at {lastActivity.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-xs">
+                                      <MessageCircle className="w-3 h-3" />
+                                      <span>{conversation.status}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </DrawerContent>
+            </Drawer>
+            
             {turns.length > 0 && (
               <Button
                 size="icon"
@@ -517,121 +627,74 @@ export default function VoiceChat() {
       </main>
 
       {/* Voice Composer */}
-      {currentView === 'chat' && (
-        <footer className="app-footer">
-          <div className="px-lg pt-lg pb-lg keyboard-aware">
-            {/* Unified Composer Layout */}
-            <div className="flex flex-col gap-lg">
-              {/* Text Input Field - Show when expanded */}
-              {showTextInput && (
-                <div className="transition-all duration-300 ease-in-out">
-                  <div className="flex gap-md items-end">
-                    <Input
-                      value={textMessage}
-                      onChange={(e) => setTextMessage(e.target.value)}
-                      placeholder="Type your message..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleTextMessage();
-                        }
-                      }}
-                      disabled={isProcessing || recordingState === 'processing'}
-                      className="flex-1 h-12 rounded-full px-lg text-base touch-target"
-                      data-testid="input-text-message"
-                      aria-label="Type your message"
-                    />
-                    <Button
-                      onClick={handleTextMessage}
-                      disabled={isProcessing || recordingState === 'processing' || !textMessage.trim()}
-                      size="icon"
-                      className="touch-target w-12 h-12 rounded-full hover-elevate active-elevate-2"
-                      data-testid="button-send-text"
-                      aria-label="Send message"
-                    >
-                      <Send className="w-5 h-5" />
-                    </Button>
-                  </div>
+      <footer className="app-footer">
+        <div className="px-lg pt-lg pb-lg keyboard-aware">
+          {/* Unified Composer Layout */}
+          <div className="flex flex-col gap-lg">
+            {/* Text Input Field - Show when expanded */}
+            {showTextInput && (
+              <div className="transition-all duration-300 ease-in-out">
+                <div className="flex gap-md items-end">
+                  <Input
+                    value={textMessage}
+                    onChange={(e) => setTextMessage(e.target.value)}
+                    placeholder="Type your message..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleTextMessage();
+                      }
+                    }}
+                    disabled={isProcessing || recordingState === 'processing'}
+                    className="flex-1 h-12 rounded-full px-lg text-base touch-target"
+                    data-testid="input-text-message"
+                    aria-label="Type your message"
+                  />
+                  <Button
+                    onClick={handleTextMessage}
+                    disabled={isProcessing || recordingState === 'processing' || !textMessage.trim()}
+                    size="icon"
+                    className="touch-target w-12 h-12 rounded-full hover-elevate active-elevate-2"
+                    data-testid="button-send-text"
+                    aria-label="Send message"
+                  >
+                    <Send className="w-5 h-5" />
+                  </Button>
                 </div>
-              )}
+              </div>
+            )}
+            
+            {/* Voice Interface */}
+            <div className="flex flex-col items-center gap-lg">
+              <VoiceRecordButton
+                onRecordingStart={handleRecordingStart}
+                onRecordingStop={handleRecordingStop}
+                onError={handleRecordingError}
+                disabled={isValidatingConversation}
+                state={recordingState}
+                error={recordingError || undefined}
+                onRetry={() => {
+                  setRecordingError(null);
+                  setRecordingState('idle');
+                }}
+              />
               
-              {/* Voice Interface */}
-              <div className="flex flex-col items-center gap-lg">
-                <VoiceRecordButton
-                  onRecordingStart={handleRecordingStart}
-                  onRecordingStop={handleRecordingStop}
-                  onError={handleRecordingError}
-                  disabled={isValidatingConversation}
-                  state={recordingState}
-                  error={recordingError || undefined}
-                  onRetry={() => {
-                    setRecordingError(null);
-                    setRecordingState('idle');
-                  }}
-                />
-                
-                {/* Text Input Toggle */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowTextInput(!showTextInput)}
-                  className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate transition-all duration-200"
-                  data-testid="button-toggle-text-input"
-                  aria-label={showTextInput ? 'Hide text input' : 'Show text input'}
-                >
-                  <MessageCircle className="w-4 h-4 mr-sm" />
-                  {showTextInput ? 'Hide' : 'Show'} Text Input
-                </Button>
-              </div>
-            </div>
-          </div>
-        </footer>
-      )}
-      
-      {/* History View */}
-      {currentView === 'history' && (
-        <footer className="app-footer">
-          <div className="px-lg py-lg">
-            <div className="text-center max-w-sm mx-auto">
-              <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-lg">
-                <History className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-xl font-semibold mb-md" data-testid="text-history-title">Conversation History</h3>
-              <p className="text-base text-muted-foreground mb-lg leading-relaxed" data-testid="text-history-description">
-                Your current conversation is displayed above. 
-                {turns.length > 0 ? `You have ${turns.length} messages in this conversation.` : 'No messages yet.'}
-              </p>
+              {/* Text Input Toggle */}
               <Button
-                variant="outline"
-                onClick={() => setCurrentView('chat')}
-                className="touch-target h-12 px-xl rounded-full font-medium"
-                data-testid="button-back-to-chat"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTextInput(!showTextInput)}
+                className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate transition-all duration-200"
+                data-testid="button-toggle-text-input"
+                aria-label={showTextInput ? 'Hide text input' : 'Show text input'}
               >
-                Back to Chat
+                <MessageCircle className="w-4 h-4 mr-sm" />
+                {showTextInput ? 'Hide' : 'Show'} Text Input
               </Button>
             </div>
           </div>
-        </footer>
-      )}
-
-      {/* Bottom Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-[var(--z-sticky)] glass-blur-strong border-t border-border" 
-           style={{ paddingBottom: 'var(--safe-area-inset-bottom)' }}>
-        <div className="flex justify-center py-sm">
-          <Button 
-            variant="ghost" 
-            className="touch-target flex flex-col items-center gap-xs py-md px-xl rounded-xl hover-elevate"
-            data-testid="button-tab-history"
-            onClick={() => {
-              console.log('History tab clicked');
-              setCurrentView(currentView === 'history' ? 'chat' : 'history');
-            }}
-          >
-            <History className={`w-5 h-5 ${currentView === 'history' ? 'text-primary' : 'text-muted-foreground'}`} />
-            <span className={`text-xs font-medium ${currentView === 'history' ? 'text-primary' : 'text-muted-foreground'}`}>History</span>
-          </Button>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }
