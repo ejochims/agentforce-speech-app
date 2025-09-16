@@ -53,7 +53,7 @@ export default function VoiceRecordButton({
         stream.getTracks().forEach(track => track.stop());
       };
       
-      recorder.start();
+      recorder.start(100); // Record in 100ms chunks for better data capture
       mediaRecorder.current = recorder;
       setIsRecording(true);
       onRecordingStart?.();

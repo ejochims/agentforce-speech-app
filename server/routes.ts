@@ -20,11 +20,23 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const upload = multer({
   dest: 'uploads/audio/',
   fileFilter: (req, file, cb) => {
-    const allowedMimes = ['audio/wav', 'audio/mp3', 'audio/mpeg', 'audio/webm', 'audio/ogg'];
-    if (allowedMimes.includes(file.mimetype)) {
+    // Accept audio files with more flexible MIME type checking
+    // This handles cases like 'audio/webm;codecs=opus'
+    const isAudioFile = file.mimetype.startsWith('audio/') && 
+      (file.mimetype.includes('wav') || 
+       file.mimetype.includes('mp3') || 
+       file.mimetype.includes('mpeg') || 
+       file.mimetype.includes('webm') || 
+       file.mimetype.includes('ogg') ||
+       file.mimetype.includes('m4a') ||
+       file.mimetype.includes('flac'));
+       
+    console.log('File filter check:', { mimetype: file.mimetype, accepted: isAudioFile });
+    
+    if (isAudioFile) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type'));
+      cb(new Error(`Invalid file type: ${file.mimetype}`));
     }
   },
   limits: {
@@ -93,12 +105,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'No audio file provided' });
       }
 
-      const audioReadStream = fs.createReadStream(req.file.path);
+      console.log('STT: Received file:', {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        filename: req.file.filename
+      });
 
-      const transcription = await openai.audio.transcriptions.create({
+      // Create a proper file with the right extension for OpenAI
+      const audioReadStream = fs.createReadStream(req.file.path);
+      
+      // For webm files, ensure OpenAI recognizes the format
+      const fileOptions: any = {
         file: audioReadStream,
         model: "whisper-1",
-      });
+      };
+
+      // If it's a webm file, be explicit about the format
+      if (req.file.originalname?.includes('.webm') || req.file.mimetype?.includes('webm')) {
+        console.log('STT: Processing webm audio file');
+        // Rename the stream to have .webm extension to help OpenAI recognize it
+        Object.defineProperty(audioReadStream, 'name', {
+          value: 'audio.webm',
+          configurable: true
+        });
+      }
+
+      console.log('STT: Calling OpenAI Whisper API...');
+      const transcription = await openai.audio.transcriptions.create(fileOptions);
+      console.log('STT: Transcription successful:', transcription.text);
 
       // Clean up uploaded file
       fs.unlinkSync(req.file.path);
@@ -109,6 +144,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('Error transcribing audio:', error);
+      // Clean up file even on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
       res.status(500).json({ error: 'Failed to transcribe audio' });
     }
   });
