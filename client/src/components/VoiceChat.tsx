@@ -65,13 +65,21 @@ export default function VoiceChat() {
 
   // Create turn mutation
   const { mutate: createTurn } = useMutation({
-    mutationFn: (turnData: { conversationId: string; role: string; text: string }) =>
+    mutationFn: (turnData: { conversationId: string; role: string; text: string; triggerAgent?: boolean }) =>
       apiRequest(`/api/conversations/${turnData.conversationId}/turns`, {
         method: 'POST',
         body: { role: turnData.role, text: turnData.text },
       }),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/conversations', currentConversationId, 'turns'] });
+      
+      // If this was a user turn that should trigger agent response, do it now
+      if (variables.triggerAgent && variables.role === 'user') {
+        getAgentResponse({
+          text: variables.text,
+          conversationId: variables.conversationId,
+        });
+      }
     },
   });
 
@@ -111,17 +119,12 @@ export default function VoiceChat() {
     setIsProcessing(true);
     
     try {
-      // Create user turn
+      // Create user turn and trigger agent response after it's saved
       createTurn({
         conversationId: currentConversationId,
         role: 'user',
         text: textMessage,
-      });
-
-      // Get agent response
-      getAgentResponse({
-        text: textMessage,
-        conversationId: currentConversationId,
+        triggerAgent: true, // This will trigger agent response after turn is saved
       });
       
       setTextMessage('');
@@ -173,17 +176,12 @@ export default function VoiceChat() {
       console.log('Transcribed text:', text);
 
       if (text.trim()) {
-        // Create user turn
+        // Create user turn and trigger agent response after it's saved
         createTurn({
           conversationId: currentConversationId,
           role: 'user',
           text: text,
-        });
-
-        // Get agent response
-        getAgentResponse({
-          text,
-          conversationId: currentConversationId,
+          triggerAgent: true, // This will trigger agent response after turn is saved
         });
       }
     } catch (error) {
