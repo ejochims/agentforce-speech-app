@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -291,173 +291,213 @@ export default function VoiceChat() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* iOS-style Status Bar Area */}
-      <div className="h-12"></div>
-      
-      {/* Header */}
-      <div className="text-center py-xl relative">
-        <div className="flex items-center justify-center gap-md mb-sm">
-          <img 
-            src={agentforceLogo} 
-            alt="Agentforce" 
-            className="w-10 h-10 object-contain"
-            data-testid="img-header-logo"
-          />
-          <h1 className="text-2xl font-semibold text-primary" data-testid="text-agentforce-title">
-            Agentforce
-          </h1>
-        </div>
-        
-        {/* New Chat Button - Show only when there's an active conversation */}
-        {turns.length > 0 && (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute top-lg right-lg w-9 h-9"
-            onClick={startNewChat}
-            data-testid="button-new-chat"
-          >
-            <Plus className="w-5 h-5" />
-          </Button>
-        )}
-      </div>
-
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto px-lg py-xl space-y-lg">
-        {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
-          <div className="text-center py-2xl">
+    <div className="app-shell">
+      {/* Mobile App Header */}
+      <header className="app-header">
+        <div className="flex items-center justify-between px-lg py-md h-14">
+          <div className="flex items-center gap-md flex-1">
             <img 
               src={agentforceLogo} 
               alt="Agentforce" 
-              className="w-16 h-16 object-contain mx-auto mb-lg"
-              data-testid="img-agentforce-logo"
+              className="w-8 h-8 object-contain flex-shrink-0"
+              data-testid="img-header-logo"
             />
-            <h2 className="text-xl font-semibold text-foreground mb-sm" data-testid="text-main-title">
-              Talk to AgentForce
-            </h2>
-            <p className="text-sm text-muted-foreground" data-testid="text-instructions">
-              Hold the button below to start your conversation
-            </p>
+            <h1 className="text-xl font-semibold text-foreground truncate" data-testid="text-agentforce-title">
+              Agentforce
+            </h1>
           </div>
-        )}
-
-        {isValidatingConversation && (
-          <div className="flex items-center justify-center py-2xl">
-            <Loader2 className="w-6 h-6 animate-spin text-primary mr-sm" />
-            <span className="text-sm text-muted-foreground">Connecting...</span>
-          </div>
-        )}
-
-        {turns.map((turn) => (
-          <MessageBubble
-            key={turn.id}
-            message={turn.text}
-            isUser={turn.role === 'user'}
-            timestamp={new Date(turn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          />
-        ))}
-        
-        {agentPending && (
-          <MessageBubble
-            message=""
-            isUser={false}
-            isTyping={true}
-          />
-        )}
-
-        {isProcessing && (
-          <div className="flex items-center justify-center py-lg">
-            <Loader2 className="w-6 h-6 animate-spin text-primary mr-sm" />
-            <span className="text-sm text-muted-foreground">Processing your voice...</span>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Voice Interface */}
-      {currentView === 'chat' && (
-        <div className="px-xl pt-xl pb-24 border-t border-border bg-background/95 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-lg">
-            <VoiceRecordButton
-              onRecordingStart={handleRecordingStart}
-              onRecordingStop={handleRecordingStop}
-              disabled={isProcessing || isValidatingConversation}
-            />
-            
-            {/* Text Input Toggle */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowTextInput(!showTextInput)}
-              className="text-xs text-muted-foreground"
-              data-testid="button-toggle-text-input"
-            >
-              <MessageCircle className="w-4 h-4 mr-1" />
-              {showTextInput ? 'Hide' : 'Show'} Text Input
-            </Button>
-            
-            {/* Text Input Field */}
-            {showTextInput && (
-              <div className="w-full max-w-sm flex gap-sm">
-                <Input
-                  value={textMessage}
-                  onChange={(e) => setTextMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  onKeyPress={(e) => e.key === 'Enter' && handleTextMessage()}
-                  disabled={isProcessing}
-                  data-testid="input-text-message"
-                />
-                <Button
-                  onClick={handleTextMessage}
-                  disabled={isProcessing || !textMessage.trim()}
-                  data-testid="button-send-text"
-                >
-                  Send
-                </Button>
-              </div>
+          
+          {/* Header Actions */}
+          <div className="flex items-center gap-sm">
+            {turns.length > 0 && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="touch-target w-11 h-11 rounded-full"
+                onClick={startNewChat}
+                data-testid="button-new-chat"
+              >
+                <Plus className="w-5 h-5" />
+              </Button>
             )}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="touch-target w-11 h-11 rounded-full"
+              data-testid="button-settings"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
           </div>
         </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="app-content relative">
+        <div className="px-lg py-lg space-y-lg h-full">
+          {/* Welcome State */}
+          {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-xl">
+              <div className="mb-2xl">
+                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-xl mx-auto">
+                  <img 
+                    src={agentforceLogo} 
+                    alt="Agentforce" 
+                    className="w-12 h-12 object-contain"
+                    data-testid="img-agentforce-logo"
+                  />
+                </div>
+                <h2 className="text-2xl font-semibold text-foreground mb-md" data-testid="text-main-title">
+                  Talk to Agentforce
+                </h2>
+                <p className="text-base text-muted-foreground leading-relaxed max-w-sm" data-testid="text-instructions">
+                  Start a conversation by tapping the microphone button below. Speak naturally and I'll help you with whatever you need.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Connection State */}
+          {isValidatingConversation && (
+            <div className="flex flex-col items-center justify-center h-full">
+              <div className="flex items-center gap-md mb-md">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <span className="text-base text-muted-foreground">Connecting...</span>
+              </div>
+              <p className="text-sm text-muted-foreground/80">Establishing secure connection</p>
+            </div>
+          )}
+
+          {/* Messages */}
+          {turns.length > 0 && (
+            <div className="space-y-lg pb-lg">
+              {turns.map((turn) => (
+                <MessageBubble
+                  key={turn.id}
+                  message={turn.text}
+                  isUser={turn.role === 'user'}
+                  timestamp={new Date(turn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                />
+              ))}
+              
+              {agentPending && (
+                <MessageBubble
+                  message=""
+                  isUser={false}
+                  isTyping={true}
+                />
+              )}
+
+              {isProcessing && (
+                <div className="flex items-center justify-center py-xl">
+                  <div className="flex items-center gap-md">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Processing your voice...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+      </main>
+
+      {/* Voice Composer */}
+      {currentView === 'chat' && (
+        <footer className="app-footer">
+          <div className="px-lg pt-lg pb-lg">
+            {/* Text Input Field - Show when expanded */}
+            {showTextInput && (
+              <div className="mb-lg">
+                <div className="flex gap-md">
+                  <Input
+                    value={textMessage}
+                    onChange={(e) => setTextMessage(e.target.value)}
+                    placeholder="Type your message..."
+                    onKeyPress={(e) => e.key === 'Enter' && handleTextMessage()}
+                    disabled={isProcessing}
+                    className="flex-1 h-12 rounded-full px-lg text-base"
+                    data-testid="input-text-message"
+                  />
+                  <Button
+                    onClick={handleTextMessage}
+                    disabled={isProcessing || !textMessage.trim()}
+                    size="icon"
+                    className="touch-target w-12 h-12 rounded-full"
+                    data-testid="button-send-text"
+                  >
+                    <Send className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            {/* Voice Interface */}
+            <div className="flex flex-col items-center gap-lg">
+              <VoiceRecordButton
+                onRecordingStart={handleRecordingStart}
+                onRecordingStop={handleRecordingStop}
+                disabled={isProcessing || isValidatingConversation}
+              />
+              
+              {/* Text Input Toggle */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTextInput(!showTextInput)}
+                className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate"
+                data-testid="button-toggle-text-input"
+              >
+                <MessageCircle className="w-4 h-4 mr-sm" />
+                {showTextInput ? 'Hide' : 'Show'} Text Input
+              </Button>
+            </div>
+          </div>
+        </footer>
       )}
       
       {/* History View */}
       {currentView === 'history' && (
-        <div className="p-xl border-t border-border bg-background/95 backdrop-blur-sm">
-          <div className="text-center">
-            <History className="w-12 h-12 mx-auto mb-lg text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-sm" data-testid="text-history-title">Conversation History</h3>
-            <p className="text-sm text-muted-foreground mb-lg" data-testid="text-history-description">
-              Your current conversation is displayed above. 
-              {turns.length > 0 ? `You have ${turns.length} messages in this conversation.` : 'No messages yet.'}
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => setCurrentView('chat')}
-              data-testid="button-back-to-chat"
-            >
-              Back to Chat
-            </Button>
+        <footer className="app-footer">
+          <div className="px-lg py-lg">
+            <div className="text-center max-w-sm mx-auto">
+              <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-lg">
+                <History className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-md" data-testid="text-history-title">Conversation History</h3>
+              <p className="text-base text-muted-foreground mb-lg leading-relaxed" data-testid="text-history-description">
+                Your current conversation is displayed above. 
+                {turns.length > 0 ? `You have ${turns.length} messages in this conversation.` : 'No messages yet.'}
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentView('chat')}
+                className="touch-target h-12 px-xl rounded-full font-medium"
+                data-testid="button-back-to-chat"
+              >
+                Back to Chat
+              </Button>
+            </div>
           </div>
-        </div>
+        </footer>
       )}
 
-
       {/* Bottom Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border">
-        <div className="flex justify-around py-sm max-w-md mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 z-[var(--z-sticky)] glass-blur-strong border-t border-border" 
+           style={{ paddingBottom: 'var(--safe-area-inset-bottom)' }}>
+        <div className="flex justify-center py-sm">
           <Button 
             variant="ghost" 
-            className="flex flex-col items-center gap-xs py-md px-lg"
+            className="touch-target flex flex-col items-center gap-xs py-md px-xl rounded-xl hover-elevate"
             data-testid="button-tab-history"
             onClick={() => {
               console.log('History tab clicked');
               setCurrentView(currentView === 'history' ? 'chat' : 'history');
             }}
           >
-            <History className={`w-5 h-5 ${currentView === 'history' ? 'text-foreground' : 'text-muted-foreground'}`} />
-            <span className={`text-xs ${currentView === 'history' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>History</span>
+            <History className={`w-5 h-5 ${currentView === 'history' ? 'text-primary' : 'text-muted-foreground'}`} />
+            <span className={`text-xs font-medium ${currentView === 'history' ? 'text-primary' : 'text-muted-foreground'}`}>History</span>
           </Button>
         </div>
       </div>

@@ -101,6 +101,18 @@
   --spacing-xl: 1.5rem;  /* 24px */
   --spacing-2xl: 2rem;   /* 32px */
 
+  /* Safe Area Insets for Mobile Devices */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+
+  /* Mobile App Shell Z-Index Scale */
+  --z-content: 1;
+  --z-sticky: 10;
+  --z-overlay: 20;
+  --z-modal: 30;
+
   --font-sans: Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -264,6 +276,77 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  /* Mobile App Shell Base Styles */
+  .app-shell {
+    @apply min-h-screen flex flex-col overflow-hidden;
+  }
+
+  .app-header {
+    @apply sticky top-0 z-[var(--z-sticky)] bg-background/80 backdrop-blur-md border-b border-border;
+    padding-top: var(--safe-area-inset-top);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+
+  .app-content {
+    @apply flex-1 overflow-y-auto;
+  }
+
+  .app-footer {
+    @apply z-[var(--z-sticky)] bg-background/90 backdrop-blur-md border-t border-border;
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+
+  /* Mobile touch targets */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Glass blur effects */
+  .glass-blur {
+    @apply backdrop-blur-md bg-background/80;
+  }
+
+  .glass-blur-strong {
+    @apply backdrop-blur-lg bg-background/90;
+  }
+
+  /* Mobile keyboard handling */
+  .keyboard-aware {
+    /* Use 100vh for initial viewport height */
+    height: 100vh;
+    /* On mobile, use 100dvh when available for dynamic viewport height */
+    height: 100dvh;
+  }
+
+  /* Prevent zoom on input focus on iOS Safari */
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Ensure content remains accessible when keyboard appears */
+  .app-content {
+    /* Smooth transitions when keyboard appears/disappears */
+    transition: padding-bottom 0.2s ease-in-out;
+  }
+
+  /* Add extra padding when keyboard might be visible (input focused) */
+  .app-content:has(input:focus) {
+    padding-bottom: 200px;
+  }
+
+  /* Fallback for browsers that don't support :has() */
+  @supports not selector(:has(*)) {
+    .app-content.keyboard-visible {
+      padding-bottom: 200px;
+    }
   }
 }
 
