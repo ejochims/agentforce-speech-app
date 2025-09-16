@@ -3,6 +3,7 @@ import { Mic, Phone, Settings, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VoiceRecordButton from './VoiceRecordButton';
 import AudioVisualizer from './AudioVisualizer';
+import agentforceLogo from '@assets/agentforce-1080x608-2_1758045639671.png';
 
 export default function VoiceChat() {
   const [isRecording, setIsRecording] = useState(false);
@@ -25,18 +26,33 @@ export default function VoiceChat() {
       
       {/* Header */}
       <div className="text-center py-6">
-        <h1 className="text-2xl font-semibold text-primary" data-testid="text-agentforce-title">
-          Agentforce
-        </h1>
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center p-0.5">
+            <img 
+              src={agentforceLogo} 
+              alt="Agentforce" 
+              className="w-full h-full object-contain"
+              data-testid="img-header-logo"
+            />
+          </div>
+          <h1 className="text-2xl font-semibold text-primary" data-testid="text-agentforce-title">
+            Agentforce
+          </h1>
+        </div>
       </div>
 
       {/* Main Voice Interface Card */}
       <div className="px-6 pb-8">
         <div className="bg-card border border-card-border rounded-3xl p-8 mx-auto max-w-sm shadow-sm">
-          {/* Microphone Icon */}
+          {/* Agentforce Logo */}
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-              <Mic className="w-8 h-8 text-muted-foreground" />
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center p-1">
+              <img 
+                src={agentforceLogo} 
+                alt="Agentforce" 
+                className="w-full h-full object-contain"
+                data-testid="img-agentforce-logo"
+              />
             </div>
           </div>
 
