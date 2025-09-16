@@ -264,8 +264,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the conversation to check for existing sessionId
+      console.log('🔍 Looking for conversation:', conversationId);
       const conversation = await storage.getConversation(conversationId);
+      console.log('🔍 Found conversation:', conversation ? 'YES' : 'NO', conversation?.id);
+      
       if (!conversation) {
+        console.log('❌ Conversation not found in storage for ID:', conversationId);
+        // List all conversations for debugging
+        const allConversations = await storage.getConversations();
+        console.log('📋 Available conversations:', allConversations.map(c => c.id));
         return res.status(404).json({ error: 'Conversation not found' });
       }
 
