@@ -288,7 +288,7 @@ export default function VoiceChat() {
 
       {/* Voice Interface */}
       {currentView === 'chat' && (
-        <div className="p-6 border-t border-border bg-background/95 backdrop-blur-sm">
+        <div className="px-6 pt-6 pb-16 border-t border-border bg-background/95 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
             <VoiceRecordButton
               onRecordingStart={handleRecordingStart}
