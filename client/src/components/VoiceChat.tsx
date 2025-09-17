@@ -1062,6 +1062,7 @@ export default function VoiceChat() {
               <div className={`relative transition-transform duration-300 ${
                 recordingState === 'recording' ? 'scale-110' : 
                 recordingState === 'processing' ? 'scale-105 animate-pulse' :
+                agentPending ? 'scale-105 animate-pulse' :
                 isAudioPlaying ? 'scale-105' :
                 'scale-100'
               }`}>
@@ -1071,6 +1072,15 @@ export default function VoiceChat() {
                     <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" />
                     <div className="absolute inset-0 rounded-full border-2 border-primary/10 animate-ping" style={{ animationDelay: '0.5s' }} />
                     <div className="absolute inset-0 rounded-full border-2 border-primary/5 animate-ping" style={{ animationDelay: '1s' }} />
+                  </>
+                )}
+                
+                {/* Ripple Rings for Agent Thinking */}
+                {agentPending && (
+                  <>
+                    <div className="absolute inset-0 rounded-full border-2 border-yellow-500/25 animate-ping" />
+                    <div className="absolute inset-0 rounded-full border-2 border-yellow-400/15 animate-ping" style={{ animationDelay: '0.3s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-yellow-300/10 animate-ping" style={{ animationDelay: '0.6s' }} />
                   </>
                 )}
                 
@@ -1100,6 +1110,7 @@ export default function VoiceChat() {
                 <p className="text-sm text-muted-foreground max-w-sm">
                   {recordingState === 'recording' ? 'Listening...' :
                    recordingState === 'processing' ? 'Processing your message...' :
+                   agentPending ? 'Thinking...' :
                    isAudioPlaying ? 'Agent is speaking...' :
                    'Ready to chat! Press and hold to speak.'}
                 </p>
