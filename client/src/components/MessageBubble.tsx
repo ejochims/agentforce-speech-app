@@ -56,7 +56,7 @@ export default function MessageBubble({
     <div 
       className={`
         flex items-end gap-sm 
-        ${isUser ? 'justify-end flex-row-reverse' : 'justify-start'}
+        ${isUser ? 'justify-end' : 'justify-start'}
         ${isFirstInGroup ? 'mt-lg' : 'mt-xs'}
         ${isLastInGroup ? 'mb-lg' : 'mb-xs'}
         ${!isTyping && hasAnimated ? 'animate-message-appear' : ''}
@@ -66,33 +66,25 @@ export default function MessageBubble({
       aria-label={ariaLabel}
       data-testid={`message-${isUser ? 'user' : 'agent'}`}
     >
-      {/* Avatar - Only show for first message in group */}
-      {showAvatar && isFirstInGroup && (
+      {/* Avatar - Only show for AGENT messages (left side) */}
+      {!isUser && showAvatar && isFirstInGroup && (
         <div className="flex-shrink-0">
-          {isUser ? (
-            <Avatar className="w-8 h-8">
-              <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-medium">
-                <User className="w-4 h-4" aria-hidden="true" />
-              </AvatarFallback>
-            </Avatar>
-          ) : (
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={agentforceLogo} alt="Agentforce assistant avatar" className="object-contain p-1" />
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                <Bot className="w-4 h-4" aria-hidden="true" />
-              </AvatarFallback>
-            </Avatar>
-          )}
+          <Avatar className="w-8 h-8">
+            <AvatarImage src={agentforceLogo} alt="Agentforce assistant avatar" className="object-contain p-1" />
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+              <Bot className="w-4 h-4" aria-hidden="true" />
+            </AvatarFallback>
+          </Avatar>
         </div>
       )}
       
-      {/* Spacer when avatar is hidden to maintain alignment */}
-      {showAvatar && !isFirstInGroup && (
+      {/* Spacer when avatar is hidden to maintain alignment for AGENT messages */}
+      {!isUser && showAvatar && !isFirstInGroup && (
         <div className="w-8 flex-shrink-0" />
       )}
       
       {/* Message Content */}
-      <div className={`max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[80%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         {/* Message Bubble */}
         <div
           className={`
