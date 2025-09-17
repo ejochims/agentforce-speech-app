@@ -153,8 +153,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add the audio file to form data (ElevenLabs expects 'file' field)
       formData.append('file', audioBlob, 'audio.webm');
       
-      // Add the required model_id parameter
-      formData.append('model_id', 'eleven_multilingual_v1');
+      // Add the required model_id parameter  
+      formData.append('model_id', 'scribe_v1');
 
       console.log('STT: Calling ElevenLabs STT API...');
       const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
