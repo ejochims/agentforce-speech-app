@@ -17,6 +17,8 @@ import { apiRequest } from '@/lib/queryClient';
 import VoiceRecordButton from './VoiceRecordButton';
 import AudioVisualizer from './AudioVisualizer';
 import MessageBubble from './MessageBubble';
+import MessageSkeleton from './MessageSkeleton';
+import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
 import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
 import type { Conversation, Turn } from '@shared/schema';
@@ -36,6 +38,26 @@ export default function VoiceChat() {
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
+  // Global keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc key to close history drawer or cancel recording
+      if (e.key === 'Escape') {
+        if (isHistoryOpen) {
+          e.preventDefault();
+          setIsHistoryOpen(false);
+        } else if (isRecording) {
+          e.preventDefault();
+          setRecordingState('cancelled');
+          setIsRecording(false);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isHistoryOpen, isRecording, setRecordingState, setIsRecording]);
 
   // Validate conversation on component mount
   const validateAndSetConversation = useCallback(async (conversationId: string) => {
@@ -379,7 +401,7 @@ export default function VoiceChat() {
   return (
     <div className="app-shell">
       {/* Mobile App Header */}
-      <header className="app-header">
+      <header className="app-header" role="banner">
         <div className="flex items-center justify-between px-lg py-md h-14">
           <div className="flex items-center gap-md flex-1">
             <img 
@@ -417,17 +439,31 @@ export default function VoiceChat() {
                 
                 <div className="px-lg pb-lg overflow-y-auto max-h-[calc(85vh-120px)]">
                   {conversationsLoading ? (
-                    <div className="flex items-center justify-center py-xl">
-                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                      <span className="ml-md text-muted-foreground">Loading conversations...</span>
+                    <div className="space-y-md" aria-busy="true" aria-label="Loading conversations">
+                      {/* Show 6 skeleton conversation cards */}
+                      <ConversationSkeleton />
+                      <ConversationSkeleton />
+                      <ConversationSkeleton />
+                      <ConversationSkeleton />
+                      <ConversationSkeleton />
+                      <ConversationSkeleton />
                     </div>
                   ) : conversations.length === 0 ? (
-                    <div className="text-center py-xl">
-                      <History className="w-12 h-12 text-muted-foreground mx-auto mb-lg" />
-                      <h3 className="text-lg font-medium mb-md">No conversations yet</h3>
-                      <p className="text-muted-foreground text-sm">
-                        Start your first conversation to see it appear here
+                    <div className="text-center py-xl" role="status">
+                      <History className="w-16 h-16 text-muted-foreground mx-auto mb-lg" aria-hidden="true" />
+                      <h3 className="text-xl font-semibold mb-md text-foreground">Ready to chat?</h3>
+                      <p className="text-muted-foreground mb-lg max-w-sm mx-auto leading-relaxed">
+                        Start a conversation with Agentforce using voice or text. Your chat history will appear here.
                       </p>
+                      <Button 
+                        onClick={() => setIsHistoryOpen(false)} 
+                        className="rounded-full"
+                        data-testid="button-start-new-conversation"
+                        aria-label="Close history and start new conversation"
+                      >
+                        <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+                        Start New Conversation
+                      </Button>
                     </div>
                   ) : (
                     <div className="space-y-md">
@@ -513,8 +549,10 @@ export default function VoiceChat() {
       </header>
 
       {/* Main Content Area */}
-      <main className="app-content relative">
+      <main className="app-content relative" role="main" aria-label="Chat conversation">
         <div className="px-lg py-lg space-y-lg h-full">
+          {/* Screen reader live region for chat updates */}
+          <div className="sr-only" aria-live="polite" id="chat-announcements"></div>
           {/* Welcome State */}
           {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
             <div className="flex flex-col items-center justify-center h-full text-center px-xl">
@@ -531,26 +569,47 @@ export default function VoiceChat() {
                   Talk to Agentforce
                 </h2>
                 <p className="text-base text-muted-foreground leading-relaxed max-w-sm" data-testid="text-instructions">
-                  Start a conversation by tapping the microphone button below. Speak naturally and I'll help you with whatever you need.
+                  Start a conversation by tapping the microphone button below. Speak naturally and I'll help you with whatever you need!
                 </p>
               </div>
             </div>
           )}
 
-          {/* Connection State */}
+          {/* Connection State with Skeleton Messages */}
           {isValidatingConversation && (
-            <div className="flex flex-col items-center justify-center h-full">
-              <div className="flex items-center gap-md mb-md">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                <span className="text-base text-muted-foreground">Connecting...</span>
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-center py-lg">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" aria-hidden="true" />
+                <span className="ml-md text-base text-muted-foreground">Connecting...</span>
               </div>
-              <p className="text-sm text-muted-foreground/80">Establishing secure connection</p>
+              
+              {/* Skeleton message bubbles to show loading conversation */}
+              <div className="flex-1 overflow-y-auto" aria-busy="true" aria-label="Loading conversation messages">
+                <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={false} />
+                <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={true} />
+                <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={false} />
+                <MessageSkeleton isUser={false} isFirstInGroup={false} isLastInGroup={true} />
+                <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={true} />
+                <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={true} />
+                <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={false} />
+                <MessageSkeleton isUser={true} isFirstInGroup={false} isLastInGroup={true} />
+              </div>
             </div>
           )}
 
           {/* Messages */}
-          {turns.length > 0 && (
-            <div className="pb-lg">
+          {turnsLoading && !isValidatingConversation ? (
+            <div className="pb-lg" aria-busy="true" aria-label="Loading messages">
+              {/* Skeleton messages while loading */}
+              <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={true} />
+              <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={false} />
+              <MessageSkeleton isUser={true} isFirstInGroup={false} isLastInGroup={true} />
+              <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={false} />
+              <MessageSkeleton isUser={false} isFirstInGroup={false} isLastInGroup={true} />
+              <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={true} />
+            </div>
+          ) : turns.length > 0 && (
+            <div className="pb-lg" aria-busy={agentPending} aria-live="polite">
               {/* Render saved messages */}
               {turns.map((turn, index) => {
                 const previousTurn = index > 0 ? turns[index - 1] : null;
@@ -607,17 +666,19 @@ export default function VoiceChat() {
                 );
               })}
               
-              {/* Agent typing indicator */}
+              {/* Agent typing indicator with loading state */}
               {agentPending && (
-                <MessageBubble
-                  message=""
-                  isUser={false}
-                  isTyping={true}
-                  isFirstInGroup={true}
-                  isLastInGroup={true}
-                  showAvatar={true}
-                  showTimestamp={false}
-                />
+                <div aria-busy="true" aria-live="polite" role="status" aria-label="Agent is responding">
+                  <MessageBubble
+                    message=""
+                    isUser={false}
+                    isTyping={true}
+                    isFirstInGroup={true}
+                    isLastInGroup={true}
+                    showAvatar={true}
+                    showTimestamp={false}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -656,9 +717,14 @@ export default function VoiceChat() {
                     size="icon"
                     className="touch-target w-12 h-12 rounded-full hover-elevate active-elevate-2"
                     data-testid="button-send-text"
-                    aria-label="Send message"
+                    aria-label={isProcessing ? 'Sending message...' : 'Send message'}
+                    aria-busy={isProcessing}
                   >
-                    <Send className="w-5 h-5" />
+                    {isProcessing ? (
+                      <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Send className="w-5 h-5" aria-hidden="true" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -666,18 +732,29 @@ export default function VoiceChat() {
             
             {/* Voice Interface */}
             <div className="flex flex-col items-center gap-lg">
-              <VoiceRecordButton
-                onRecordingStart={handleRecordingStart}
-                onRecordingStop={handleRecordingStop}
-                onError={handleRecordingError}
-                disabled={isValidatingConversation}
-                state={recordingState}
-                error={recordingError || undefined}
-                onRetry={() => {
-                  setRecordingError(null);
-                  setRecordingState('idle');
-                }}
-              />
+              <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
+                <VoiceRecordButton
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
+                  onError={handleRecordingError}
+                  disabled={isValidatingConversation}
+                  state={recordingState}
+                  error={recordingError || undefined}
+                  onRetry={() => {
+                    setRecordingError(null);
+                    setRecordingState('idle');
+                  }}
+                />
+                {/* Processing indicator */}
+                {recordingState === 'processing' && (
+                  <div className="text-center mt-sm" role="status" aria-live="polite">
+                    <div className="flex items-center justify-center gap-sm text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      <span>Processing audio...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               {/* Text Input Toggle */}
               <Button
@@ -687,8 +764,9 @@ export default function VoiceChat() {
                 className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate transition-all duration-200"
                 data-testid="button-toggle-text-input"
                 aria-label={showTextInput ? 'Hide text input' : 'Show text input'}
+                aria-expanded={showTextInput}
               >
-                <MessageCircle className="w-4 h-4 mr-sm" />
+                <MessageCircle className="w-4 h-4 mr-sm" aria-hidden="true" />
                 {showTextInput ? 'Hide' : 'Show'} Text Input
               </Button>
             </div>

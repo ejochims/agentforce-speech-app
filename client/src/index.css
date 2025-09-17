@@ -113,6 +113,11 @@
   --z-overlay: 20;
   --z-modal: 30;
 
+  /* Animation durations for consistent timing */
+  --animation-fast: 150ms;
+  --animation-normal: 200ms;
+  --animation-slow: 300ms;
+
   --font-sans: Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
@@ -459,5 +464,136 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  /* Message Appear Animations - B4 */
+  @keyframes messageSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes messageFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Animation utilities with 60fps targeting */
+  .animate-message-appear {
+    animation: messageSlideUp var(--animation-normal) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-fill-mode: both;
+  }
+
+  .animate-message-fade {
+    animation: messageFadeIn var(--animation-fast) ease-out forwards;
+    animation-fill-mode: both;
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-message-appear {
+      animation: messageFadeIn var(--animation-fast) ease-out forwards;
+    }
+    
+    .animate-message-fade {
+      animation: messageFadeIn var(--animation-fast) ease-out forwards;
+    }
+  }
+
+  /* Performance optimizations for 60fps */
+  .animate-message-appear,
+  .animate-message-fade {
+    will-change: opacity, transform;
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+
+  /* Reset will-change after animation */
+  .animate-message-appear:not(.animating),
+  .animate-message-fade:not(.animating) {
+    will-change: auto;
+  }
+
+  /* Recording Affordances - B5 */
+  @keyframes recordingBreathe {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.05);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideToCancelHint {
+    0% {
+      transform: translateX(0);
+      opacity: 0.7;
+    }
+    50% {
+      transform: translateX(-8px);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes recordingPulse {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Recording animation utilities */
+  .animate-recording-breathe {
+    animation: recordingBreathe 2s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .animate-slide-hint {
+    animation: slideToCancelHint 2.5s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .animate-recording-pulse {
+    animation: recordingPulse 1.5s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  /* Reduced motion support for recording */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-recording-breathe,
+    .animate-slide-hint,
+    .animate-recording-pulse {
+      animation: none;
+      transform: none;
+      opacity: 1;
+    }
+    
+    /* Keep some visual indication but no motion */
+    .animate-recording-breathe {
+      opacity: 0.9;
+    }
   }
 }

@@ -202,6 +202,19 @@ export default function VoiceRecordButton({
     }
   };
   
+  // Keyboard navigation handler
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleToggleRecording();
+    } else if (e.key === 'Escape' && state === 'recording') {
+      e.preventDefault();
+      handleStopRecording();
+    }
+  };
+
   // Touch/mouse event handlers for slide-to-cancel
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled || state === 'processing') return;
@@ -332,12 +345,16 @@ export default function VoiceRecordButton({
       
       {/* Recording Button */}
       <div className="relative flex flex-col items-center">
-        {/* Slide to cancel indicator */}
-        {isDragging && (
+        {/* Slide to cancel indicator with hint animation */}
+        {isDragging ? (
           <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 px-lg py-sm bg-muted/90 backdrop-blur-sm rounded-full text-sm text-muted-foreground font-medium whitespace-nowrap transition-all duration-200">
             {isSlideToCancel ? '← Release to cancel' : '← Slide to cancel'}
           </div>
-        )}
+        ) : state === 'recording' && recordingDuration > 2 ? (
+          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-sm py-xs text-xs text-muted-foreground/80 font-medium whitespace-nowrap animate-slide-hint">
+            ← Slide to cancel
+          </div>
+        ) : null}
         
         {/* Screen reader instructions for slide-to-cancel (only announce when recording) */}
         {state === 'recording' && (
@@ -358,7 +375,9 @@ export default function VoiceRecordButton({
           ref={buttonRef}
           size="icon"
           disabled={disabled}
-          className={getButtonClassName()}
+          className={`${getButtonClassName()} ${
+            state === 'recording' && !isSlideToCancel ? 'animate-recording-breathe' : ''
+          }`}
           style={{
             transform: `translateX(${dragOffset}px)`,
             transition: isDragging ? 'none' : 'transform 0.2s ease-out'
@@ -367,6 +386,7 @@ export default function VoiceRecordButton({
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onKeyDown={handleKeyDown}
           data-testid="button-voice-record"
           aria-label={getStatusText()}
           aria-pressed={state === 'recording'}
@@ -376,9 +396,9 @@ export default function VoiceRecordButton({
         >
           {getIcon()}
           
-          {/* Pulse ring animation for recording state */}
+          {/* Enhanced pulse animation for recording state */}
           {state === 'recording' && !isSlideToCancel && (
-            <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-ping opacity-75" />
+            <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-recording-pulse opacity-75" />
           )}
         </Button>
       </div>

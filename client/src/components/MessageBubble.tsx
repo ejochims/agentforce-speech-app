@@ -2,6 +2,7 @@ import { Bot, User, CheckCheck, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
 import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
+import { useState, useEffect } from 'react';
 
 interface MessageBubbleProps {
   message: string;
@@ -26,11 +27,31 @@ export default function MessageBubble({
   showAvatar = true,
   showTimestamp = true
 }: MessageBubbleProps) {
+  const [hasAnimated, setHasAnimated] = useState(false);
+  
   const formattedTimestamp = timestamp 
     ? typeof timestamp === 'string' 
       ? timestamp 
       : formatRelativeTime(timestamp)
     : undefined;
+
+  // Trigger animation on mount for new messages
+  useEffect(() => {
+    if (!isTyping && !hasAnimated) {
+      const timer = setTimeout(() => setHasAnimated(true), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isTyping, hasAnimated]);
+
+  // Compute accessibility information
+  const messageRole = isUser ? undefined : 'log';
+  const ariaLabel = isTyping 
+    ? `${isUser ? 'You are' : 'Agentforce is'} typing` 
+    : `${isUser ? 'Your message' : 'Agentforce message'}: ${message}`;
+  const screenReaderText = isTyping 
+    ? undefined
+    : `${isUser ? 'You' : 'Agentforce'} said: ${message}${formattedTimestamp ? ` at ${formattedTimestamp}` : ''}`;
+
   return (
     <div 
       className={`
@@ -38,7 +59,11 @@ export default function MessageBubble({
         ${isUser ? 'justify-end flex-row-reverse' : 'justify-start'}
         ${isFirstInGroup ? 'mt-lg' : 'mt-xs'}
         ${isLastInGroup ? 'mb-lg' : 'mb-xs'}
+        ${!isTyping && hasAnimated ? 'animate-message-appear' : ''}
+        ${!isTyping && !hasAnimated ? 'opacity-0' : ''}
       `}
+      role={messageRole}
+      aria-label={ariaLabel}
       data-testid={`message-${isUser ? 'user' : 'agent'}`}
     >
       {/* Avatar - Only show for first message in group */}
@@ -47,14 +72,14 @@ export default function MessageBubble({
           {isUser ? (
             <Avatar className="w-8 h-8">
               <AvatarFallback className="bg-secondary text-secondary-foreground text-xs font-medium">
-                <User className="w-4 h-4" />
+                <User className="w-4 h-4" aria-hidden="true" />
               </AvatarFallback>
             </Avatar>
           ) : (
             <Avatar className="w-8 h-8">
-              <AvatarImage src={agentforceLogo} alt="Agentforce" className="object-contain p-1" />
+              <AvatarImage src={agentforceLogo} alt="Agentforce assistant avatar" className="object-contain p-1" />
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
-                <Bot className="w-4 h-4" />
+                <Bot className="w-4 h-4" aria-hidden="true" />
               </AvatarFallback>
             </Avatar>
           )}
@@ -94,16 +119,25 @@ export default function MessageBubble({
             }
             ${messageState === 'error' ? 'ring-2 ring-destructive/20' : ''}
           `}
+          aria-live={!isUser && !isTyping ? 'polite' : undefined}
         >
+          {/* Screen reader text */}
+          {screenReaderText && (
+            <span className="sr-only">{screenReaderText}</span>
+          )}
+          
           {isTyping ? (
-            <div className="flex gap-1 items-center py-1">
+            <div className="flex gap-1 items-center py-1" aria-hidden="true">
               <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]" />
               <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]" />
               <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+              <span className="sr-only">{isUser ? 'You are typing' : 'Agentforce is typing'}</span>
             </div>
           ) : (
             <div className="flex flex-col gap-xs">
-              <p className="text-base leading-relaxed whitespace-pre-wrap">{message}</p>
+              <p className="text-base leading-relaxed whitespace-pre-wrap" aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}>
+                {message}
+              </p>
               
               {/* Message State Indicator for User Messages */}
               {isUser && messageState && (
@@ -113,18 +147,21 @@ export default function MessageBubble({
                     : isUser 
                     ? 'text-primary-foreground/70'
                     : 'text-muted-foreground'
-                }`}>
+                }`} aria-live="polite">
                   {messageState === 'sending' && (
                     <>
-                      <Clock className="w-3 h-3" />
+                      <Clock className="w-3 h-3" aria-hidden="true" />
                       <span>Sending...</span>
                     </>
                   )}
                   {messageState === 'sent' && (
-                    <CheckCheck className="w-3 h-3" />
+                    <>
+                      <CheckCheck className="w-3 h-3" aria-hidden="true" />
+                      <span className="sr-only">Message sent successfully</span>
+                    </>
                   )}
                   {messageState === 'error' && (
-                    <span>Failed to send</span>
+                    <span role="alert">Failed to send</span>
                   )}
                 </div>
               )}
@@ -139,8 +176,11 @@ export default function MessageBubble({
               isUser ? 'justify-end' : 'justify-start'
             }`}
             data-testid="message-timestamp"
+            id={`timestamp-${isUser ? 'user' : 'agent'}`}
           >
-            <span>{formattedTimestamp}</span>
+            <span aria-label={`Message sent ${formattedTimestamp}`}>
+              {formattedTimestamp}
+            </span>
           </div>
         )}
       </div>
