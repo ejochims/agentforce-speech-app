@@ -1086,8 +1086,8 @@ export default function VoiceChat() {
                     setRecordingState('idle');
                   }}
                 />
-                {/* Processing indicator */}
-                {recordingState === 'processing' && (
+                {/* Processing indicator - Only show in conversation mode */}
+                {recordingState === 'processing' && showConversation && (
                   <div className="text-center mt-sm" role="status" aria-live="polite">
                     <div className="flex items-center justify-center gap-sm text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
