@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX } from 'lucide-react';
 import { 
   Drawer,
   DrawerContent,
@@ -36,6 +36,17 @@ export default function VoiceChat() {
   const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  
+  // Audio permission and playback state
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('audioEnabled') === 'true';
+  });
+  const [showAudioPrompt, setShowAudioPrompt] = useState<boolean>(() => {
+    return localStorage.getItem('audioEnabled') === null;
+  });
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [pendingAudioText, setPendingAudioText] = useState<string | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -58,6 +69,58 @@ export default function VoiceChat() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isHistoryOpen, isRecording, setRecordingState, setIsRecording]);
+
+  // Initialize audio context with user gesture
+  const initializeAudio = useCallback(async () => {
+    try {
+      console.log('🔊 Initializing audio context...');
+      
+      // Create and resume audio context
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+      
+      setAudioContext(ctx);
+      setAudioEnabled(true);
+      setShowAudioPrompt(false);
+      
+      // Store permission in localStorage
+      localStorage.setItem('audioEnabled', 'true');
+      
+      console.log('✓ Audio context initialized successfully');
+      
+      // If there's pending audio, play it now
+      if (pendingAudioText) {
+        console.log('🎵 Playing pending audio text:', pendingAudioText.substring(0, 50) + '...');
+        await playTextAsAudio(pendingAudioText);
+        setPendingAudioText(null);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to initialize audio:', error);
+      setAudioEnabled(false);
+      localStorage.setItem('audioEnabled', 'false');
+      return false;
+    }
+  }, [pendingAudioText]);
+
+  // Disable audio function
+  const disableAudio = useCallback(() => {
+    console.log('🔇 Disabling audio...');
+    
+    if (audioContext) {
+      audioContext.close();
+      setAudioContext(null);
+    }
+    
+    setAudioEnabled(false);
+    setShowAudioPrompt(false);
+    setPendingAudioText(null);
+    localStorage.setItem('audioEnabled', 'false');
+  }, [audioContext]);
 
   // Validate conversation on component mount
   const validateAndSetConversation = useCallback(async (conversationId: string) => {
@@ -372,27 +435,90 @@ export default function VoiceChat() {
     }
   };
 
-  const playTextAsAudio = async (text: string) => {
+  const playTextAsAudio = async (text: string): Promise<boolean> => {
     try {
+      // Check if audio is enabled and context is available
+      if (!audioEnabled || !audioContext) {
+        console.log('🔇 Audio disabled or context not available, storing as pending:', text.substring(0, 50) + '...');
+        setPendingAudioText(text);
+        return false;
+      }
+
+      // Check if audio context is in good state
+      if (audioContext.state === 'suspended') {
+        console.log('🔊 Audio context suspended, attempting to resume...');
+        try {
+          await audioContext.resume();
+        } catch (error) {
+          console.error('❌ Failed to resume audio context:', error);
+          setPendingAudioText(text);
+          return false;
+        }
+      }
+
+      console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
+      
       // Use a unique URL with query params to enable audio streaming
       const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=shimmer&_t=${Date.now()}`;
       
       const audio = new Audio();
       audio.preload = 'auto';
       audio.src = audioUrl;
-      
-      // Start playing as soon as enough data is available
-      audio.addEventListener('canplay', () => {
-        audio.play().catch(console.error);
-      });
-      
-      // Handle any playback errors
-      audio.addEventListener('error', (e) => {
-        console.error('Audio playback error:', e);
+
+      // Return a promise that resolves when playback starts or fails
+      return new Promise((resolve) => {
+        const cleanup = () => {
+          audio.removeEventListener('canplay', onCanPlay);
+          audio.removeEventListener('error', onError);
+          audio.removeEventListener('ended', onEnded);
+        };
+
+        const onCanPlay = () => {
+          audio.play()
+            .then(() => {
+              console.log('✓ Audio playback started successfully');
+              resolve(true);
+            })
+            .catch((playError) => {
+              console.error('❌ Audio play failed:', playError);
+              // Store as pending for later manual play
+              setPendingAudioText(text);
+              cleanup();
+              resolve(false);
+            });
+        };
+
+        const onError = (e: Event) => {
+          console.error('❌ Audio loading error:', e);
+          setPendingAudioText(text);
+          cleanup();
+          resolve(false);
+        };
+
+        const onEnded = () => {
+          console.log('✓ Audio playback completed');
+          cleanup();
+        };
+
+        audio.addEventListener('canplay', onCanPlay);
+        audio.addEventListener('error', onError);
+        audio.addEventListener('ended', onEnded);
+
+        // Set a timeout in case the audio never loads
+        setTimeout(() => {
+          if (audio.readyState === 0) {
+            console.warn('⚠️ Audio loading timeout');
+            setPendingAudioText(text);
+            cleanup();
+            resolve(false);
+          }
+        }, 5000);
       });
       
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('❌ Error in playTextAsAudio:', error);
+      setPendingAudioText(text);
+      return false;
     }
   };
 
@@ -534,6 +660,19 @@ export default function VoiceChat() {
                 <Plus className="w-5 h-5" />
               </Button>
             )}
+            
+            {/* Audio Toggle Button */}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="touch-target w-11 h-11 rounded-full"
+              onClick={() => audioEnabled ? disableAudio() : initializeAudio()}
+              data-testid={`button-audio-${audioEnabled ? 'enabled' : 'disabled'}`}
+              title={audioEnabled ? 'Disable voice responses' : 'Enable voice responses'}
+            >
+              {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </Button>
+            
             <Button
               size="icon"
               variant="ghost"
@@ -551,6 +690,90 @@ export default function VoiceChat() {
         <div className="px-lg py-lg space-y-lg h-full">
           {/* Screen reader live region for chat updates */}
           <div className="sr-only" aria-live="polite" id="chat-announcements"></div>
+          
+          {/* Audio Enable Prompt */}
+          {showAudioPrompt && !isValidatingConversation && (
+            <div className="audio-prompt-container">
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="p-lg text-center">
+                  <Volume2 className="w-12 h-12 text-primary mx-auto mb-md" />
+                  <h3 className="text-lg font-semibold text-foreground mb-sm">Enable Voice Responses?</h3>
+                  <p className="text-sm text-muted-foreground mb-lg max-w-md mx-auto leading-relaxed">
+                    Agentforce can speak its responses aloud for a more natural conversation experience. 
+                    This requires your permission to play audio.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-sm justify-center">
+                    <Button
+                      onClick={initializeAudio}
+                      className="rounded-full"
+                      data-testid="button-enable-audio"
+                    >
+                      <Volume2 className="w-4 h-4 mr-2" />
+                      Enable Voice Responses
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowAudioPrompt(false);
+                        localStorage.setItem('audioEnabled', 'false');
+                      }}
+                      className="rounded-full"
+                      data-testid="button-disable-audio"
+                    >
+                      <VolumeX className="w-4 h-4 mr-2" />
+                      Keep Text Only
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          
+          {/* Pending Audio Notification */}
+          {pendingAudioText && !showAudioPrompt && (
+            <div className="pending-audio-container">
+              <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
+                <CardContent className="p-lg">
+                  <div className="flex items-center justify-between gap-md">
+                    <div className="flex items-center gap-sm">
+                      <VolumeX className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                      <div>
+                        <h4 className="font-medium text-orange-800 dark:text-orange-200">Voice Response Available</h4>
+                        <p className="text-sm text-orange-700 dark:text-orange-300">
+                          Tap to play the voice response
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-sm">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (pendingAudioText) {
+                            initializeAudio();
+                          }
+                        }}
+                        className="rounded-full bg-orange-600 hover:bg-orange-700 text-white"
+                        data-testid="button-play-pending-audio"
+                      >
+                        <Volume2 className="w-4 h-4 mr-1" />
+                        Play
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPendingAudioText(null)}
+                        className="rounded-full border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900"
+                        data-testid="button-dismiss-pending-audio"
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          
           {/* Welcome State */}
           {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
             <div className="flex flex-col items-center justify-center h-full text-center px-xl">
