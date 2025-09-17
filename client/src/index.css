@@ -300,7 +300,7 @@
   }
 
   .app-footer {
-    @apply sticky bottom-0 z-[var(--z-sticky)] bg-background/90 backdrop-blur-md border-t border-border;
+    @apply z-[var(--z-sticky)] bg-background/90 backdrop-blur-md border-t border-border;
     padding-bottom: var(--safe-area-inset-bottom);
     padding-left: var(--safe-area-inset-left);
     padding-right: var(--safe-area-inset-right);
