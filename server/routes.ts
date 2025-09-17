@@ -226,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Text-to-Speech - Streaming version for faster playback
   app.get('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'shimmer', speed } = req.query;
+      const { text, voice = 'allison', speed } = req.query;
       
       if (!text || typeof text !== 'string') {
         return res.status(400).json({ error: 'Text is required' });
@@ -237,7 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Map voice name to ElevenLabs voice ID
-      const voiceId = voiceMapping[voice as string] || voiceMapping['shimmer'];
+      const voiceId = voiceMapping[voice as string] || voiceMapping['allison'];
       
       // Set default speed: 1.10x for Allison, 1.0x for others
       const defaultSpeed = voice === 'allison' ? 1.10 : 1.0;
@@ -322,7 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Keep POST endpoint for backward compatibility
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'shimmer', speed } = req.body;
+      const { text, voice = 'allison', speed } = req.body;
       
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
@@ -333,7 +333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Map voice name to ElevenLabs voice ID
-      const voiceId = voiceMapping[voice] || voiceMapping['shimmer'];
+      const voiceId = voiceMapping[voice] || voiceMapping['allison'];
       
       // Set default speed: 1.10x for Allison, 1.0x for others
       const defaultSpeed = voice === 'allison' ? 1.10 : 1.0;
