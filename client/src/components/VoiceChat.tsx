@@ -60,6 +60,7 @@ export default function VoiceChat() {
   });
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [pendingAudioText, setPendingAudioText] = useState<string | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -570,6 +571,7 @@ export default function VoiceChat() {
           audio.play()
             .then(() => {
               console.log('✓ Audio playback started successfully');
+              setIsAudioPlaying(true);
               resolve(true);
             })
             .catch((playError) => {
@@ -579,6 +581,7 @@ export default function VoiceChat() {
               };
               console.error('❌ Audio play failed:', errorDetails);
               // Store as pending for later manual play
+              setIsAudioPlaying(false);
               setPendingAudioText(text);
               cleanup();
               resolve(false);
@@ -594,6 +597,7 @@ export default function VoiceChat() {
             networkState: audio.networkState
           };
           console.error('❌ Audio loading error:', errorDetails);
+          setIsAudioPlaying(false);
           setPendingAudioText(text);
           cleanup();
           resolve(false);
@@ -601,6 +605,7 @@ export default function VoiceChat() {
 
         const onEnded = () => {
           console.log('✓ Audio playback completed');
+          setIsAudioPlaying(false);
           cleanup();
         };
 
@@ -1057,6 +1062,7 @@ export default function VoiceChat() {
               <div className={`relative transition-transform duration-300 ${
                 recordingState === 'recording' ? 'scale-110' : 
                 recordingState === 'processing' ? 'scale-105 animate-pulse' :
+                isAudioPlaying ? 'scale-105' :
                 'scale-100'
               }`}>
                 {/* Ripple Rings for Voice Activity */}
@@ -1065,6 +1071,15 @@ export default function VoiceChat() {
                     <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" />
                     <div className="absolute inset-0 rounded-full border-2 border-primary/10 animate-ping" style={{ animationDelay: '0.5s' }} />
                     <div className="absolute inset-0 rounded-full border-2 border-primary/5 animate-ping" style={{ animationDelay: '1s' }} />
+                  </>
+                )}
+                
+                {/* Ripple Rings for Agent Speaking */}
+                {isAudioPlaying && (
+                  <>
+                    <div className="absolute inset-0 rounded-full border-2 border-green-500/30 animate-ping" />
+                    <div className="absolute inset-0 rounded-full border-2 border-green-400/20 animate-ping" style={{ animationDelay: '0.4s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-green-300/10 animate-ping" style={{ animationDelay: '0.8s' }} />
                   </>
                 )}
                 
@@ -1085,6 +1100,7 @@ export default function VoiceChat() {
                 <p className="text-sm text-muted-foreground max-w-sm">
                   {recordingState === 'recording' ? 'Listening...' :
                    recordingState === 'processing' ? 'Processing your message...' :
+                   isAudioPlaying ? 'Agent is speaking...' :
                    'Ready to chat! Press and hold to speak.'}
                 </p>
               </div>
