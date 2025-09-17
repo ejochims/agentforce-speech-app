@@ -297,11 +297,10 @@
 
   .app-content {
     @apply flex-1 overflow-y-auto;
-    padding-bottom: 140px; /* Space for fixed footer */
   }
 
   .app-footer {
-    @apply fixed bottom-0 left-0 right-0 z-[var(--z-sticky)] bg-background/90 backdrop-blur-md border-t border-border;
+    @apply sticky bottom-0 z-[var(--z-sticky)] bg-background/90 backdrop-blur-md border-t border-border;
     padding-bottom: var(--safe-area-inset-bottom);
     padding-left: var(--safe-area-inset-left);
     padding-right: var(--safe-area-inset-right);
