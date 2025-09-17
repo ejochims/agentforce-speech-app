@@ -127,11 +127,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Speech-to-Text
+  // Speech-to-Text using ElevenLabs
   app.post('/api/stt', upload.single('audio'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file provided' });
+      }
+
+      if (!process.env.ELEVENLABS_API_KEY) {
+        return res.status(500).json({ error: 'ElevenLabs API key not configured' });
       }
 
       console.log('STT: Received file:', {
@@ -141,35 +145,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filename: req.file.filename
       });
 
-      // Create a proper file with the right extension for OpenAI
-      const audioReadStream = fs.createReadStream(req.file.path);
+      // Create FormData for ElevenLabs API
+      const formData = new FormData();
+      const audioBuffer = fs.readFileSync(req.file.path);
+      const audioBlob = new Blob([audioBuffer], { type: req.file.mimetype });
       
-      // For webm files, ensure OpenAI recognizes the format
-      const fileOptions: any = {
-        file: audioReadStream,
-        model: "whisper-1",
-      };
+      // Add the audio file to form data
+      formData.append('audio', audioBlob, 'audio.webm');
+      
+      // Add the required model_id parameter
+      formData.append('model_id', 'eleven_multilingual_v1');
 
-      // If it's a webm file, be explicit about the format
-      if (req.file.originalname?.includes('.webm') || req.file.mimetype?.includes('webm')) {
-        console.log('STT: Processing webm audio file');
-        // Rename the stream to have .webm extension to help OpenAI recognize it
-        Object.defineProperty(audioReadStream, 'name', {
-          value: 'audio.webm',
-          configurable: true
-        });
+      console.log('STT: Calling ElevenLabs STT API...');
+      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+        method: 'POST',
+        headers: {
+          'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ElevenLabs API error:', response.status, errorText);
+        throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
       }
 
-      console.log('STT: Calling OpenAI Whisper API...');
-      const transcription = await openai.audio.transcriptions.create(fileOptions);
-      console.log('STT: Transcription successful:', transcription.text);
+      const result = await response.json();
+      console.log('STT: Transcription successful:', result.text);
 
       // Clean up uploaded file
       fs.unlinkSync(req.file.path);
 
       res.json({ 
-        text: transcription.text,
-        duration: 0 // Duration not available from Whisper API
+        text: result.text || '',
+        duration: 0 // Duration not available from ElevenLabs STT API
       });
     } catch (error) {
       console.error('Error transcribing audio:', error);
@@ -181,13 +191,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Provide detailed error message based on error type
       let errorMessage = 'Failed to transcribe audio';
       if (error instanceof Error) {
-        if (error.message.includes('Invalid file format')) {
+        if (error.message.includes('Invalid file format') || error.message.includes('400')) {
           errorMessage = 'Invalid audio format. Please try recording again.';
-        } else if (error.message.includes('API key')) {
+        } else if (error.message.includes('API key') || error.message.includes('401')) {
           errorMessage = 'Audio transcription service unavailable. Please try again later.';
         } else if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
           errorMessage = 'Network timeout. Please check your connection and try again.';
-        } else if (error.message.includes('rate limit')) {
+        } else if (error.message.includes('rate limit') || error.message.includes('429')) {
           errorMessage = 'Service temporarily busy. Please wait a moment and try again.';
         } else {
           errorMessage = `Transcription failed: ${error.message}`;
