@@ -297,6 +297,7 @@
 
   .app-content {
     @apply flex-1 overflow-y-auto;
+    padding-bottom: 140px; /* Space for fixed footer */
   }
 
   .app-footer {
