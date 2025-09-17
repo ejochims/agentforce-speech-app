@@ -98,7 +98,12 @@ export default function VoiceChat() {
           setAudioContext(ctx);
           console.log('✓ Audio context restored successfully');
         } catch (error) {
-          console.error('❌ Failed to restore audio context:', error);
+          const errorDetails = {
+            message: error instanceof Error ? error.message : String(error),
+            name: error instanceof Error ? error.name : 'Unknown',
+            stack: error instanceof Error ? error.stack : undefined
+          };
+          console.error('❌ Failed to restore audio context:', errorDetails);
           // If we can't create the context, disable audio
           setAudioEnabled(false);
           localStorage.setItem('audioEnabled', 'false');
@@ -152,7 +157,12 @@ export default function VoiceChat() {
       
       return true;
     } catch (error) {
-      console.error('❌ Failed to initialize audio:', error);
+      const errorDetails = {
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      };
+      console.error('❌ Failed to initialize audio:', errorDetails);
       setAudioEnabled(false);
       localStorage.setItem('audioEnabled', 'false');
       return false;
@@ -322,7 +332,14 @@ export default function VoiceChat() {
           state: 'error' 
         })));
       }
-      console.error('Error creating turn:', error);
+      const errorDetails = {
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'Unknown',
+        status: (error as any)?.status,
+        response: (error as any)?.response,
+        stack: error instanceof Error ? error.stack : undefined
+      };
+      console.error('Error creating turn:', errorDetails);
     },
   });
 
@@ -344,7 +361,14 @@ export default function VoiceChat() {
       }
     },
     onError: (error: any, variables) => {
-      console.error('Agentforce error:', error);
+      const errorDetails = {
+        message: error?.message || String(error),
+        name: error?.name,
+        status: error?.status,
+        response: error?.response,
+        stack: error?.stack
+      };
+      console.error('Agentforce error:', errorDetails);
       
       // Check if it's a conversation not found error
       if (error.message?.includes('Conversation not found') || 
@@ -405,7 +429,12 @@ export default function VoiceChat() {
       
       setTextMessage('');
     } catch (error) {
-      console.error('Error sending text message:', error);
+      const errorDetails = {
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      };
+      console.error('Error sending text message:', errorDetails);
     } finally {
       setIsProcessing(false);
     }
@@ -454,7 +483,20 @@ export default function VoiceChat() {
 
       if (!sttResponse.ok) {
         const errorText = await sttResponse.text();
-        throw new Error(`STT failed: ${sttResponse.status} ${errorText}`);
+        let errorJson;
+        try { 
+          errorJson = JSON.parse(errorText); 
+        } catch (e) { 
+          // errorText is not JSON, use as is
+        }
+        const errorDetails = {
+          status: sttResponse.status,
+          statusText: sttResponse.statusText,
+          body: errorJson || errorText,
+          headers: Object.fromEntries(sttResponse.headers.entries())
+        };
+        console.error('STT API Error details:', errorDetails);
+        throw new Error(`STT failed: ${sttResponse.status} ${errorJson?.error || errorText}`);
       }
 
       const { text } = await sttResponse.json();
@@ -478,7 +520,14 @@ export default function VoiceChat() {
         setRecordingState('error');
       }
     } catch (error) {
-      console.error('Error processing voice:', error);
+      const errorDetails = {
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined,
+        response: (error as any)?.response,
+        status: (error as any)?.status
+      };
+      console.error('Error processing voice:', errorDetails);
       const errorMessage = error instanceof Error ? error.message : 'Failed to process recording';
       setRecordingError(`Processing failed: ${errorMessage}`);
       setRecordingState('error');
@@ -524,7 +573,11 @@ export default function VoiceChat() {
               resolve(true);
             })
             .catch((playError) => {
-              console.error('❌ Audio play failed:', playError);
+              const errorDetails = {
+                message: playError instanceof Error ? playError.message : String(playError),
+                name: playError instanceof Error ? playError.name : 'Unknown'
+              };
+              console.error('❌ Audio play failed:', errorDetails);
               // Store as pending for later manual play
               setPendingAudioText(text);
               cleanup();
@@ -533,7 +586,14 @@ export default function VoiceChat() {
         };
 
         const onError = (e: Event) => {
-          console.error('❌ Audio loading error:', e);
+          const errorDetails = {
+            type: e.type,
+            target: e.target ? 'HTMLAudioElement' : 'Unknown',
+            currentSrc: audio.currentSrc,
+            readyState: audio.readyState,
+            networkState: audio.networkState
+          };
+          console.error('❌ Audio loading error:', errorDetails);
           setPendingAudioText(text);
           cleanup();
           resolve(false);
@@ -560,7 +620,12 @@ export default function VoiceChat() {
       });
       
     } catch (error) {
-      console.error('❌ Error in playTextAsAudio:', error);
+      const errorDetails = {
+        message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      };
+      console.error('❌ Error in playTextAsAudio:', errorDetails);
       setPendingAudioText(text);
       return false;
     }
