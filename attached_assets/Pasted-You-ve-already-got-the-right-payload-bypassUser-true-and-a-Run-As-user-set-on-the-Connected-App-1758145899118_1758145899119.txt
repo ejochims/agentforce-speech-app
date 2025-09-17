@@ -1,0 +1,100 @@
+You’ve already got the right payload (`bypassUser: true`) and a Run-As user set on the Connected App. That means the error isn’t coming from your body, it’s coming from either the **token’s origin**, the **Connected App policy**, or a **setting on this specific agent**. Here’s the quickest way to isolate and fix it.
+
+# 10-minute isolation plan
+
+## 1) Prove it’s not the agent by reusing the known-good token
+
+* Mint a **fresh token from the Connected App that worked with your Service Agent**.
+* Call **Start Session** on the **Employee Agent** using the same known-good token and the same body you used above:
+
+  * keep `bypassUser: true`
+  * no `userId` or `$Context.SalesforceUserId`
+  * `instanceConfig.endpoint` = your `*.my.salesforce.com`
+
+**Outcome**
+
+* If this works → the issue is with **AEAapi**’s policies or how its token is minted.
+* If this still fails → the issue is **this agent’s configuration**.
+
+## 2) If the AEAapi token is the problem, fix the Connected App
+
+Open **Setup → App Manager → AEAapi → Manage → Edit Policies** and verify:
+
+* **Client Credentials Flow → Run As** = your admin (Active user, has a full license, and **Profile has API Enabled**).
+* OAuth scopes include: `sfap_api`, `chatbot_api`, `api`, `refresh_token, offline_access`.
+* Save, then **mint a brand-new AEAapi token** and retry the same Start Session.
+
+Common gotchas here
+
+* You changed Run-As but reused an **old** token. Always mint a new one after policy changes.
+* The Run-As user is Active, but the **Profile lost “API Enabled.”** Re-enable it or pick another user.
+
+## 3) If the agent is the problem, compare it to your working Service Agent
+
+Do a side-by-side diff of these items between the **Employee Agent** and the **Service Agent** that worked:
+
+* **Connections → API**
+
+  * The **exact** Connected App attached. Detach and re-attach **AEAapi**. Save.
+  * Temporarily remove the other API connection to remove ambiguity, then add it back later.
+
+* **Agent state**
+
+  * Is the Employee Agent **Activated/Deployed**? If you made recent changes and it’s still in Draft, deploy it.
+
+* **Agent variables / defaults**
+
+  * Open the agent’s Variables and look for any default like `$Context.SalesforceUserId` or a custom `userId`. If you see anything like that, **remove it**. It will force a user and collide with `bypassUser: true`.
+
+* **Channels → Agent API**
+
+  * Make sure the Agent API channel is present and enabled on this agent. If the UI lets you, toggle it off, save, then back on.
+  * If there’s a “Default execution user” field in that channel’s UI in your org, set it to your admin user as a safety net. If you don’t see such a field, no worries, the Run-As on the Connected App is sufficient.
+
+* **Endpoint sanity**
+
+  * `instanceConfig.endpoint` is exactly `https://<your>.my.salesforce.com` (not lightning.force.com, not visualforce.com).
+
+## 4) Try a clean Start Session again
+
+Use this body exactly (swap domain and agent id):
+
+```json
+{
+  "externalSessionKey": "2c3a1f10-2b67-4c8c-bd0d-5f8a8a5e6f11",
+  "instanceConfig": { "endpoint": "https://<your>.my.salesforce.com" },
+  "tz": "America/Los_Angeles",
+  "featureSupport": "Streaming",
+  "streamingCapabilities": { "chunkTypes": ["Text"] },
+  "variables": [],
+  "bypassUser": true
+}
+```
+
+# If it still throws “Invalid user ID provided on start session”
+
+Work down these quick checks:
+
+* **Hidden user hints**
+  Ensure you are not injecting `userId` or `$Context.SalesforceUserId` anywhere. Check both your code and the agent’s default variables. Remove them.
+
+* **Run-As user health**
+  The Run-As user must be: Active, licensed, Profile with **API Enabled**. After any change here, **mint a fresh token** and retry.
+
+* **Token’s origin and org**
+  Verify the token was minted from **AEAapi** and against the **same org** where the Employee Agent lives. Sandbox vs prod mixups will create head-scratching 400s.
+
+* **Recreate the API connection**
+  Delete the Employee Agent’s AEAapi API connection, re-add it, Save, mint a new AEAapi token, retry.
+
+# If you want true per-employee context
+
+You can switch this agent to run **as the real employee** by using the **JWT Bearer** flow for that named user and removing `bypassUser`. That’s the cleanest way to guarantee per-user sharing, approvals, and audit. I can give you a copy-paste JWT script if you want to switch now.
+
+---
+
+If you want me to pinpoint it faster, send these three redacted bits and I’ll match them line-by-line:
+
+* the first 6 chars of the **client\_id** you used to mint the token
+* the **Connected App name** attached on the Employee Agent’s API connection
+* your exact **Start Session** body (redact the externalSessionKey)

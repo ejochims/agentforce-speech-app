@@ -140,9 +140,12 @@ export class AgentforceClient {
       instanceConfig: {
         endpoint: this.instanceUrl || this.domainUrl
       },
+      tz: "America/Los_Angeles",
+      featureSupport: "Streaming",
       streamingCapabilities: {
         chunkTypes: ["Text"]
       },
+      variables: [],
       bypassUser: true
     };
 
