@@ -100,11 +100,24 @@ export default function VoiceChat() {
     try {
       console.log('🔊 Initializing audio context...');
       
-      // Create and resume audio context
+      // Create and resume audio context (for recording)
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       
       if (ctx.state === 'suspended') {
         await ctx.resume();
+      }
+      
+      // Unlock HTML5 audio for Safari iOS (for TTS playback)
+      console.log('🔓 Unlocking HTML5 audio for iOS Safari...');
+      const silentAudio = new Audio();
+      silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
+      (silentAudio as any).playsInline = true;
+      silentAudio.muted = false;
+      try {
+        await silentAudio.play();
+        console.log('✓ HTML5 audio unlocked successfully');
+      } catch (e) {
+        console.log('⚠️ HTML5 audio unlock failed (may work anyway):', e);
       }
       
       setAudioContext(ctx);
@@ -462,23 +475,11 @@ export default function VoiceChat() {
 
   const playTextAsAudio = async (text: string): Promise<boolean> => {
     try {
-      // Check if audio is enabled and context is available
-      if (!audioEnabled || !audioContext) {
-        console.log('🔇 Audio disabled or context not available, storing as pending:', text.substring(0, 50) + '...');
+      // Check if audio is enabled - HTML5 audio doesn't need audioContext
+      if (!audioEnabled) {
+        console.log('🔇 Audio disabled, storing as pending:', text.substring(0, 50) + '...');
         setPendingAudioText(text);
         return false;
-      }
-
-      // Check if audio context is in good state
-      if (audioContext.state === 'suspended') {
-        console.log('🔊 Audio context suspended, attempting to resume...');
-        try {
-          await audioContext.resume();
-        } catch (error) {
-          console.error('❌ Failed to resume audio context:', error);
-          setPendingAudioText(text);
-          return false;
-        }
       }
 
       console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
@@ -489,6 +490,10 @@ export default function VoiceChat() {
       const audio = new Audio();
       audio.preload = 'auto';
       audio.src = audioUrl;
+      
+      // iOS Safari compatibility - set attributes for better playback
+      (audio as any).playsInline = true;
+      audio.muted = false;
 
       // Return a promise that resolves when playback starts or fails
       return new Promise((resolve) => {
