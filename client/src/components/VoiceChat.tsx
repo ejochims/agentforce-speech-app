@@ -49,7 +49,7 @@ export default function VoiceChat() {
           setIsHistoryOpen(false);
         } else if (isRecording) {
           e.preventDefault();
-          setRecordingState('cancelled');
+          setRecordingState('idle');
           setIsRecording(false);
         }
       }
@@ -251,10 +251,8 @@ export default function VoiceChat() {
     },
   });
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [turns, agentPending]);
+  // Removed auto-scroll to prevent interference with user interactions
+  // Users can manually scroll to see new messages
 
   const handleRecordingStart = () => {
     setIsRecording(true);
@@ -469,7 +467,7 @@ export default function VoiceChat() {
                     <div className="space-y-md">
                       {conversations.map((conversation) => {
                         const isCurrentConversation = conversation.id === currentConversationId;
-                        const lastActivity = new Date(conversation.updatedAt || conversation.createdAt);
+                        const lastActivity = new Date(conversation.createdAt);
                         
                         return (
                           <Card 

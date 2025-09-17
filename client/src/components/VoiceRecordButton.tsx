@@ -26,17 +26,12 @@ export default function VoiceRecordButton({
 }: VoiceRecordButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [dragOffset, setDragOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isSlideToCancel, setIsSlideToCancel] = useState(false);
 
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const startX = useRef<number>(0);
-  const cancelThreshold = 100; // pixels to drag left to cancel
 
   // Haptic feedback helper
   const triggerHapticFeedback = (pattern: number | number[]) => {
@@ -147,22 +142,13 @@ export default function VoiceRecordButton({
       console.log(`${cancelled ? 'Cancelling' : 'Stopping'} recording after ${recordingTime}ms...`);
       
       // Trigger haptic feedback
-      if (cancelled) {
-        triggerHapticFeedback([50, 100, 50]); // Pattern for cancellation
-      } else {
-        triggerHapticFeedback(20); // Slightly longer for successful stop
-      }
+      triggerHapticFeedback(20);
       
       // Clear duration interval
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
         durationIntervalRef.current = null;
       }
-      
-      // Reset drag state
-      setDragOffset(0);
-      setIsDragging(false);
-      setIsSlideToCancel(false);
       
       if (cancelled) {
         // Clear audio chunks to prevent processing
@@ -211,61 +197,10 @@ export default function VoiceRecordButton({
       handleToggleRecording();
     } else if (e.key === 'Escape' && state === 'recording') {
       e.preventDefault();
-      handleStopRecording();
+      stopRecording(false);
     }
   };
 
-  // Touch/mouse event handlers for slide-to-cancel
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (disabled || state === 'processing') return;
-    
-    if (state === 'error' && onRetry) {
-      onRetry();
-      return;
-    }
-    
-    e.preventDefault();
-    buttonRef.current?.setPointerCapture(e.pointerId);
-    startX.current = e.clientX;
-    setIsDragging(false);
-    
-    if (!isRecording) {
-      startRecording();
-    }
-  };
-  
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isRecording || disabled) return;
-    
-    const deltaX = e.clientX - startX.current;
-    setDragOffset(Math.min(0, deltaX)); // Only allow dragging left
-    
-    if (Math.abs(deltaX) > 10) {
-      setIsDragging(true);
-    }
-    
-    const shouldCancel = deltaX < -cancelThreshold;
-    const wasSlideToCancel = isSlideToCancel;
-    setIsSlideToCancel(shouldCancel);
-    
-    // Haptic feedback when crossing slide-to-cancel threshold
-    if (shouldCancel && !wasSlideToCancel) {
-      triggerHapticFeedback(30); // Strong feedback when entering cancel zone
-    }
-  };
-  
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (!isRecording) return;
-    
-    e.preventDefault();
-    buttonRef.current?.releasePointerCapture(e.pointerId);
-    
-    if (isSlideToCancel) {
-      stopRecording(true); // Cancel the recording
-    } else {
-      stopRecording(false); // Normal stop
-    }
-  };
   
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -282,7 +217,7 @@ export default function VoiceRecordButton({
     
     switch (state) {
       case 'recording':
-        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-lg shadow-recording-active/20 ${!isSlideToCancel ? 'animate-pulse' : ''}`;
+        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-lg shadow-recording-active/20 animate-pulse`;
       case 'processing':
         return `${baseClasses} bg-voice-processing text-voice-processing-foreground cursor-wait`;
       case 'error':
@@ -297,23 +232,20 @@ export default function VoiceRecordButton({
     
     switch (state) {
       case 'recording':
-        if (isSlideToCancel) {
-          return 'Release to cancel';
-        }
         return `Recording... ${formatDuration(recordingDuration)}`;
       case 'processing':
         return 'Processing audio...';
       case 'error':
         return error || 'Recording failed • Tap to retry';
       default:
-        return 'Hold to record';
+        return 'Tap to record';
     }
   };
   
   const getIcon = () => {
     switch (state) {
       case 'recording':
-        return isSlideToCancel ? <MicOff className="w-8 h-8" /> : <MicOff className="w-8 h-8" />;
+        return <MicOff className="w-8 h-8" />;
       case 'processing':
         return <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" />;
       case 'error':
@@ -345,47 +277,16 @@ export default function VoiceRecordButton({
       
       {/* Recording Button */}
       <div className="relative flex flex-col items-center">
-        {/* Slide to cancel indicator with hint animation */}
-        {isDragging ? (
-          <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 px-lg py-sm bg-muted/90 backdrop-blur-sm rounded-full text-sm text-muted-foreground font-medium whitespace-nowrap transition-all duration-200">
-            {isSlideToCancel ? '← Release to cancel' : '← Slide to cancel'}
-          </div>
-        ) : state === 'recording' && recordingDuration > 2 ? (
-          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-sm py-xs text-xs text-muted-foreground/80 font-medium whitespace-nowrap animate-slide-hint">
-            ← Slide to cancel
-          </div>
-        ) : null}
         
-        {/* Screen reader instructions for slide-to-cancel (only announce when recording) */}
-        {state === 'recording' && (
-          <div 
-            aria-live="polite" 
-            className="sr-only"
-            role="status"
-          >
-            {isDragging && isSlideToCancel 
-              ? 'Release to cancel recording' 
-              : isDragging 
-              ? 'Slide left to cancel recording'
-              : 'Recording in progress. Slide left and release to cancel.'}
-          </div>
-        )}
         
         <Button
           ref={buttonRef}
           size="icon"
           disabled={disabled}
           className={`${getButtonClassName()} ${
-            state === 'recording' && !isSlideToCancel ? 'animate-recording-breathe' : ''
+            state === 'recording' ? 'animate-recording-breathe' : ''
           }`}
-          style={{
-            transform: `translateX(${dragOffset}px)`,
-            transition: isDragging ? 'none' : 'transform 0.2s ease-out'
-          }}
           onClick={handleToggleRecording}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
           onKeyDown={handleKeyDown}
           data-testid="button-voice-record"
           aria-label={getStatusText()}
@@ -397,7 +298,7 @@ export default function VoiceRecordButton({
           {getIcon()}
           
           {/* Enhanced pulse animation for recording state */}
-          {state === 'recording' && !isSlideToCancel && (
+          {state === 'recording' && (
             <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-recording-pulse opacity-75" />
           )}
         </Button>
@@ -410,8 +311,6 @@ export default function VoiceRecordButton({
           className={`text-sm font-medium transition-colors duration-200 ${
             state === 'error' 
               ? 'text-destructive' 
-              : state === 'recording' && isSlideToCancel
-              ? 'text-warning'
               : 'text-muted-foreground'
           }`}
         >
@@ -428,7 +327,7 @@ export default function VoiceRecordButton({
         {/* Hidden instructions for screen readers */}
         {state === 'recording' && (
           <p className="sr-only" aria-live="polite">
-            Hold and speak to record your message. Slide left to cancel recording.
+            Recording your message. Tap the button again to stop recording.
           </p>
         )}
       </div>

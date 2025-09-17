@@ -177,7 +177,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      res.status(500).json({ error: 'Failed to transcribe audio' });
+      
+      // Provide detailed error message based on error type
+      let errorMessage = 'Failed to transcribe audio';
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid file format')) {
+          errorMessage = 'Invalid audio format. Please try recording again.';
+        } else if (error.message.includes('API key')) {
+          errorMessage = 'Audio transcription service unavailable. Please try again later.';
+        } else if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
+          errorMessage = 'Network timeout. Please check your connection and try again.';
+        } else if (error.message.includes('rate limit')) {
+          errorMessage = 'Service temporarily busy. Please wait a moment and try again.';
+        } else {
+          errorMessage = `Transcription failed: ${error.message}`;
+        }
+      }
+      
+      res.status(500).json({ 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : String(error)) : undefined
+      });
     }
   });
 
