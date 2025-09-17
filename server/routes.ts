@@ -256,7 +256,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           text,
           model_id: 'eleven_flash_v2_5', // Fast model for low latency
           voice_settings: {
-            speed: speechSpeed
+            speed: speechSpeed,
+            stability: 0.32,        // 32% stability for Allison
+            similarity_boost: 0.54  // 54% similarity for Allison
           }
         }),
       });
@@ -352,7 +354,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           text,
           model_id: 'eleven_flash_v2_5', // Fast model for low latency
           voice_settings: {
-            speed: speechSpeed
+            speed: speechSpeed,
+            stability: 0.32,        // 32% stability for Allison
+            similarity_boost: 0.54  // 54% similarity for Allison
           }
         }),
       });
