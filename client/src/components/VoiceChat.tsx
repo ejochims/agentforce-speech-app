@@ -70,6 +70,31 @@ export default function VoiceChat() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isHistoryOpen, isRecording, setRecordingState, setIsRecording]);
 
+  // Auto-initialize audio context for returning users who previously enabled audio
+  useEffect(() => {
+    const restoreAudioContext = async () => {
+      // Only auto-initialize if user previously enabled audio and we don't have a context yet
+      if (audioEnabled && !audioContext) {
+        console.log('🔊 Auto-restoring audio context for returning user...');
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          
+          // AudioContext might be suspended initially, but we don't resume it here
+          // It will be resumed automatically when we try to play audio
+          setAudioContext(ctx);
+          console.log('✓ Audio context restored successfully');
+        } catch (error) {
+          console.error('❌ Failed to restore audio context:', error);
+          // If we can't create the context, disable audio
+          setAudioEnabled(false);
+          localStorage.setItem('audioEnabled', 'false');
+        }
+      }
+    };
+
+    restoreAudioContext();
+  }, []); // Run only once on mount
+
   // Initialize audio context with user gesture
   const initializeAudio = useCallback(async () => {
     try {
