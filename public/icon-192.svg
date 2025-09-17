@@ -1,5 +1,0 @@
-<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
-  <rect width="192" height="192" rx="24" fill="#1976d2"/>
-  <path d="M96 48C104.8 48 112 55.2 112 64V80C112 88.8 104.8 96 96 96C87.2 96 80 88.8 80 80V64C80 55.2 87.2 48 96 48ZM144 80V96C144 127.2 119.2 152 88 152S32 127.2 32 96V80H48V96C48 118.4 65.6 136 88 136S128 118.4 128 96V80H144ZM96 164C97.2 164 98 164.8 98 166V176H94V166C94 164.8 94.8 164 96 164Z" fill="white"/>
-  <text x="96" y="40" font-family="system-ui, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="white">AF</text>
-</svg>
