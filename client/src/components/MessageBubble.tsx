@@ -92,7 +92,7 @@ export default function MessageBubble({
       )}
       
       {/* Message Content */}
-      <div className={`max-w-[80%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[88%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         {/* Message Bubble */}
         <div
           className={`
