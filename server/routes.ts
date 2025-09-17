@@ -218,13 +218,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     'echo': 'TxGEqnHWrfWFTfGW9XjX',    // Josh - deep male voice
     'fable': 'AZnzlk1XvdvUeBnXmlld',   // Domi - expressive female voice
     'onyx': 'VR6AewLTigWG4xSOukaG',    // Arnold - strong male voice
-    'nova': 'EXAVITQu4vr4xnSDxMaL'     // Bella - expressive female voice
+    'nova': 'EXAVITQu4vr4xnSDxMaL',    // Bella - expressive female voice
+    'allison': 'MF3mGyEYCl7XYWbV9V6O'  // Allison - millennial female voice
   };
+
 
   // Text-to-Speech - Streaming version for faster playback
   app.get('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'shimmer' } = req.query;
+      const { text, voice = 'shimmer', speed } = req.query;
       
       if (!text || typeof text !== 'string') {
         return res.status(400).json({ error: 'Text is required' });
@@ -237,7 +239,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice as string] || voiceMapping['shimmer'];
       
-      console.log('TTS: Generating speech with ElevenLabs...', { text: text.substring(0, 50) + '...', voice, voiceId });
+      // Set default speed: 1.10x for Allison, 1.0x for others
+      const defaultSpeed = voice === 'allison' ? 1.10 : 1.0;
+      const speechSpeed = speed ? parseFloat(speed as string) : defaultSpeed;
+      
+      console.log('TTS: Generating speech with ElevenLabs...', { text: text.substring(0, 50) + '...', voice, voiceId, speed: speechSpeed });
 
       // Call ElevenLabs TTS API
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
@@ -248,7 +254,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_flash_v2_5' // Fast model for low latency
+          model_id: 'eleven_flash_v2_5', // Fast model for low latency
+          voice_settings: {
+            speed: speechSpeed
+          }
         }),
       });
 
@@ -313,7 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Keep POST endpoint for backward compatibility
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'shimmer' } = req.body;
+      const { text, voice = 'shimmer', speed } = req.body;
       
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
@@ -326,7 +335,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice] || voiceMapping['shimmer'];
       
-      console.log('TTS: Generating speech with ElevenLabs...', { text: text.substring(0, 50) + '...', voice, voiceId });
+      // Set default speed: 1.10x for Allison, 1.0x for others
+      const defaultSpeed = voice === 'allison' ? 1.10 : 1.0;
+      const speechSpeed = speed || defaultSpeed;
+      
+      console.log('TTS: Generating speech with ElevenLabs...', { text: text.substring(0, 50) + '...', voice, voiceId, speed: speechSpeed });
 
       // Call ElevenLabs TTS API
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
@@ -337,7 +350,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_flash_v2_5' // Fast model for low latency
+          model_id: 'eleven_flash_v2_5', // Fast model for low latency
+          voice_settings: {
+            speed: speechSpeed
+          }
         }),
       });
 
