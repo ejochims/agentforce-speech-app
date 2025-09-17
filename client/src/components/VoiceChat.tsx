@@ -8,6 +8,16 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +43,10 @@ export default function VoiceChat() {
   const [textMessage, setTextMessage] = useState('');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isValidatingConversation, setIsValidatingConversation] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showConversation, setShowConversation] = useState<boolean>(() => {
+    return localStorage.getItem('showConversation') !== 'false'; // Default to true
+  });
   const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingError, setRecordingError] = useState<string | null>(null);
@@ -703,21 +717,55 @@ export default function VoiceChat() {
               {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
             </Button>
             
-            <Button
-              size="icon"
-              variant="ghost"
-              className="touch-target w-11 h-11 rounded-full"
-              data-testid="button-settings"
-            >
-              <Settings className="w-5 h-5" />
-            </Button>
+            <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="touch-target w-11 h-11 rounded-full"
+                  data-testid="button-settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80">
+                <SheetHeader>
+                  <SheetTitle>Settings</SheetTitle>
+                  <SheetDescription>
+                    Customize your voice chat experience
+                  </SheetDescription>
+                </SheetHeader>
+                
+                <div className="space-y-6 mt-6">
+                  <div className="flex items-center justify-between space-x-4">
+                    <Label htmlFor="show-conversation" className="flex flex-col space-y-1">
+                      <span className="text-sm font-medium">Show Conversation</span>
+                      <span className="text-xs text-muted-foreground">
+                        Display chat messages or voice-only mode
+                      </span>
+                    </Label>
+                    <Switch
+                      id="show-conversation"
+                      checked={showConversation}
+                      onCheckedChange={(checked) => {
+                        setShowConversation(checked);
+                        localStorage.setItem('showConversation', String(checked));
+                      }}
+                      data-testid="toggle-conversation"
+                    />
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="app-content relative" role="main" aria-label="Chat conversation">
-        <div className="px-lg py-lg space-y-lg h-full">
+        {showConversation ? (
+          // Conversation Mode
+          <div className="px-lg py-lg space-y-lg h-full">
           {/* Screen reader live region for chat updates */}
           <div className="sr-only" aria-live="polite" id="chat-announcements"></div>
           
@@ -935,7 +983,49 @@ export default function VoiceChat() {
           )}
           
           <div ref={messagesEndRef} />
-        </div>
+          </div>
+        ) : (
+          // Voice-Only Mode
+          <div className="flex items-center justify-center h-full px-lg">
+            <div className="flex flex-col items-center justify-center space-y-8 text-center">
+              {/* Agentforce Logo with Animation */}
+              <div className={`relative transition-transform duration-300 ${
+                recordingState === 'recording' ? 'scale-110' : 
+                recordingState === 'processing' ? 'scale-105 animate-pulse' :
+                'scale-100'
+              }`}>
+                {/* Ripple Rings for Voice Activity */}
+                {(recordingState === 'recording' || recordingState === 'processing') && (
+                  <>
+                    <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" />
+                    <div className="absolute inset-0 rounded-full border-2 border-primary/10 animate-ping" style={{ animationDelay: '0.5s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-primary/5 animate-ping" style={{ animationDelay: '1s' }} />
+                  </>
+                )}
+                
+                {/* Logo Container */}
+                <div className="w-32 h-32 rounded-full bg-primary/10 flex items-center justify-center relative overflow-hidden">
+                  <img 
+                    src={agentforceLogo} 
+                    alt="Agentforce" 
+                    className="w-20 h-20 object-contain"
+                    data-testid="voice-mode-logo"
+                  />
+                </div>
+              </div>
+              
+              {/* Status Text */}
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-foreground">Voice Mode</h2>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  {recordingState === 'recording' ? 'Listening...' :
+                   recordingState === 'processing' ? 'Processing your message...' :
+                   'Ready to chat! Press and hold to speak.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Voice Composer */}
