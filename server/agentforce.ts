@@ -143,9 +143,6 @@ export class AgentforceClient {
       streamingCapabilities: {
         chunkTypes: ["Text"]
       },
-      parameters: {
-        userId: "005KY0000018omMYAQ"
-      },
       bypassUser: true
     };
 
