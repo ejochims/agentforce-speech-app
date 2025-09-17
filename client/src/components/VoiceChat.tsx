@@ -986,8 +986,8 @@ export default function VoiceChat() {
           </div>
         ) : (
           // Voice-Only Mode
-          <div className="flex items-center justify-center h-full px-lg">
-            <div className="flex flex-col items-center justify-center space-y-8 text-center">
+          <div className="flex items-center justify-center h-full px-lg py-xl">
+            <div className="flex flex-col items-center justify-center space-y-8 text-center mt-[-10vh]">
               {/* Agentforce Logo with Animation */}
               <div className={`relative transition-transform duration-300 ${
                 recordingState === 'recording' ? 'scale-110' : 
