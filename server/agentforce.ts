@@ -38,6 +38,9 @@ export class AgentforceClient {
     this.consumerKey = process.env.SALESFORCE_CONSUMER_KEY!;
     this.consumerSecret = process.env.SALESFORCE_CONSUMER_SECRET!;
     this.agentId = process.env.SALESFORCE_AGENT_ID!;
+    
+    console.log('🔧 AgentforceClient constructor - SALESFORCE_AGENT_ID:', process.env.SALESFORCE_AGENT_ID);
+    console.log('🔧 AgentforceClient constructor - this.agentId:', this.agentId);
 
     if (!this.domainUrl || !this.consumerKey || !this.consumerSecret || !this.agentId) {
       throw new Error('Missing required Salesforce environment variables');
@@ -143,6 +146,7 @@ export class AgentforceClient {
       bypassUser: true
     };
 
+    console.log('🤖 AGENT ID BEING USED:', this.agentId);
     console.log('Starting session with payload:', JSON.stringify(payload, null, 2));
     const response: AgentforceSessionResponse = await this.makeApiCall(`/agents/${this.agentId}/sessions`, 'POST', payload);
     return response.sessionId;
