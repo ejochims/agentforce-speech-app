@@ -139,10 +139,6 @@ export class AgentforceClient {
       },
       streamingCapabilities: {
         chunkTypes: ["Text"]
-      },
-      userConfig: {
-        userId: "005000000000000000",  // Default system user ID
-        userName: "system@example.com"
       }
     };
 
