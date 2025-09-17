@@ -548,7 +548,7 @@ export default function VoiceChat() {
       console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
       
       // Use a unique URL with query params to enable audio streaming
-      const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=shimmer&_t=${Date.now()}`;
+      const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison&_t=${Date.now()}`;
       
       const audio = new Audio();
       audio.preload = 'auto';

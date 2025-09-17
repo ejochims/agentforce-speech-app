@@ -219,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     'fable': 'AZnzlk1XvdvUeBnXmlld',   // Domi - expressive female voice
     'onyx': 'VR6AewLTigWG4xSOukaG',    // Arnold - strong male voice
     'nova': 'EXAVITQu4vr4xnSDxMaL',    // Bella - expressive female voice
-    'allison': 'MF3mGyEYCl7XYWbV9V6O'  // Allison - millennial female voice
+    'allison': 'xctasy8XvGp2cVO9HL9k'  // Allison - millennial female voice
   };
 
 
