@@ -474,7 +474,7 @@ export default function VoiceChat() {
       }
       
       console.log('Sending audio file:', `recording.${fileExtension}`, 'with type:', audioBlob.type);
-      formData.append('audio', audioBlob, `recording.${fileExtension}`);
+      formData.append('file', audioBlob, `recording.${fileExtension}`);
 
       const sttResponse = await fetch('/api/stt', {
         method: 'POST',

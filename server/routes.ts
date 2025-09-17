@@ -128,7 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Speech-to-Text using ElevenLabs
-  app.post('/api/stt', upload.single('audio'), async (req, res) => {
+  app.post('/api/stt', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file provided' });
@@ -150,8 +150,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const audioBuffer = fs.readFileSync(req.file.path);
       const audioBlob = new Blob([audioBuffer], { type: req.file.mimetype });
       
-      // Add the audio file to form data
-      formData.append('audio', audioBlob, 'audio.webm');
+      // Add the audio file to form data (ElevenLabs expects 'file' field)
+      formData.append('file', audioBlob, 'audio.webm');
       
       // Add the required model_id parameter
       formData.append('model_id', 'eleven_multilingual_v1');
