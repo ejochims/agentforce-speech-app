@@ -45,7 +45,7 @@ export default function VoiceChat() {
   const [isValidatingConversation, setIsValidatingConversation] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showConversation, setShowConversation] = useState<boolean>(() => {
-    return localStorage.getItem('showConversation') !== 'false'; // Default to true
+    return localStorage.getItem('showConversation') === 'true'; // Default to false
   });
   const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
