@@ -25,13 +25,21 @@ export class SpeechFoundationsClient {
   private tokenExpiry: number | null = null;
 
   constructor() {
-    this.domainUrl = process.env.SALESFORCE_SPEECH_DOMAIN_URL!;
+    let domainUrl = process.env.SALESFORCE_SPEECH_DOMAIN_URL!;
     this.consumerKey = process.env.SALESFORCE_SPEECH_CONSUMER_KEY!;
     this.consumerSecret = process.env.SALESFORCE_SPEECH_CONSUMER_SECRET!;
 
-    if (!this.domainUrl || !this.consumerKey || !this.consumerSecret) {
+    if (!domainUrl || !this.consumerKey || !this.consumerSecret) {
       throw new Error('Missing required Salesforce Speech Foundations environment variables');
     }
+
+    // Ensure the domain URL has a protocol
+    if (!domainUrl.startsWith('http://') && !domainUrl.startsWith('https://')) {
+      domainUrl = `https://${domainUrl}`;
+    }
+    
+    // Remove trailing slash if present
+    this.domainUrl = domainUrl.replace(/\/$/, '');
   }
 
   private async getAccessToken(): Promise<string> {
