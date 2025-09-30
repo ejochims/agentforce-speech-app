@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { agentforceClient } from "./agentforce";
+import { speechFoundationsClient } from "./speech-foundations";
 import OpenAI from "openai";
 import { 
   insertConversationSchema, 
@@ -127,15 +128,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Speech-to-Text using ElevenLabs
+  // Speech-to-Text using Einstein Transcribe
   app.post('/api/stt', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file provided' });
-      }
-
-      if (!process.env.ELEVENLABS_API_KEY) {
-        return res.status(500).json({ error: 'ElevenLabs API key not configured' });
       }
 
       console.log('STT: Received file:', {
@@ -145,41 +142,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filename: req.file.filename
       });
 
-      // Create FormData for ElevenLabs API
-      const formData = new FormData();
+      // Read audio file
       const audioBuffer = fs.readFileSync(req.file.path);
-      const audioBlob = new Blob([audioBuffer], { type: req.file.mimetype });
       
-      // Add the audio file to form data (ElevenLabs expects 'file' field)
-      formData.append('file', audioBlob, 'audio.webm');
-      
-      // Add the required model_id parameter  
-      formData.append('model_id', 'scribe_v1');
-
-      console.log('STT: Calling ElevenLabs STT API...');
-      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-        method: 'POST',
-        headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('ElevenLabs API error:', response.status, errorText);
-        throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('STT: Transcription successful:', result.text);
+      // Use Einstein Transcribe
+      const transcription = await speechFoundationsClient.transcribeAudio(
+        audioBuffer, 
+        req.file.mimetype,
+        'english' // Default to English, can be made configurable
+      );
 
       // Clean up uploaded file
       fs.unlinkSync(req.file.path);
 
       res.json({ 
-        text: result.text || '',
-        duration: 0 // Duration not available from ElevenLabs STT API
+        text: transcription,
+        duration: 0 // Duration not available from Einstein Transcribe API
       });
     } catch (error) {
       console.error('Error transcribing audio:', error);
@@ -193,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof Error) {
         if (error.message.includes('Invalid file format') || error.message.includes('400')) {
           errorMessage = 'Invalid audio format. Please try recording again.';
-        } else if (error.message.includes('API key') || error.message.includes('401')) {
+        } else if (error.message.includes('authentication') || error.message.includes('401')) {
           errorMessage = 'Audio transcription service unavailable. Please try again later.';
         } else if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
           errorMessage = 'Network timeout. Please check your connection and try again.';
