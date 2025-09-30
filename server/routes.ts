@@ -189,19 +189,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Voice mapping for AWS Polly (used by Einstein Speech)
+  // Voice mapping for ElevenLabs (used by Einstein Speech V2)
   const voiceMapping: { [key: string]: string } = {
-    'shimmer': 'Matthew',   // Clear male voice
-    'alloy': 'Matthew',     // Male voice
-    'echo': 'Matthew',      // Deep male voice
-    'fable': 'Joanna',      // Female voice
-    'onyx': 'Matthew',      // Strong male voice
-    'nova': 'Joanna',       // Expressive female voice
-    'allison': 'Joanna'     // Female voice (default)
+    'shimmer': 'pNInz6obpgDQGcFmaJgB', // Adam - clear male voice
+    'alloy': 'JBFqnCBsd6RMkjVDRZzb',   // George - mature male voice
+    'echo': 'TxGEqnHWrfWFTfGW9XjX',    // Josh - deep male voice
+    'fable': 'AZnzlk1XvdvUeBnXmlld',   // Domi - expressive female voice
+    'onyx': 'VR6AewLTigWG4xSOukaG',    // Arnold - strong male voice
+    'nova': 'EXAVITQu4vr4xnSDxMaL',    // Bella - expressive female voice
+    'allison': 'xctasy8XvGp2cVO9HL9k'  // Allison - millennial female voice (default)
   };
 
 
-  // Text-to-Speech using Einstein Speech
+  // Text-to-Speech using Einstein Speech V2 with ElevenLabs voices
   app.get('/api/tts', async (req, res) => {
     try {
       const { text, voice = 'allison' } = req.query;
@@ -210,7 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Text is required' });
       }
 
-      // Map voice name to AWS Polly voice ID
+      // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice as string] || voiceMapping['allison'];
       
       // Use Einstein Speech to synthesize
@@ -257,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Text is required' });
       }
 
-      // Map voice name to AWS Polly voice ID
+      // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice] || voiceMapping['allison'];
       
       // Use Einstein Speech to synthesize

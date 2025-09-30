@@ -120,15 +120,21 @@ export class SpeechFoundationsClient {
     return transcription;
   }
 
-  async synthesizeSpeech(text: string, voiceId: string = 'Joanna'): Promise<Buffer> {
+  async synthesizeSpeech(text: string, voiceId: string = 'xctasy8XvGp2cVO9HL9k'): Promise<Buffer> {
     const token = await this.getAccessToken();
     
     const formData = new FormData();
     formData.append('input', text);
-    formData.append('engine', 'aws');
-    formData.append('voiceId', voiceId);
+    
+    // Use ElevenLabs engine with V2 API format
+    const requestConfig = JSON.stringify({
+      engine: 'elevenlabs',
+      voice_id: voiceId,
+      language: 'en'
+    });
+    formData.append('request', requestConfig);
 
-    console.log('🔊 Calling Einstein Speech API...', { text: text.substring(0, 50) + '...', voiceId });
+    console.log('🔊 Calling Einstein Speech API (ElevenLabs)...', { text: text.substring(0, 50) + '...', voiceId });
 
     const response = await fetch(
       'https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/speech-synthesis',
@@ -154,7 +160,7 @@ export class SpeechFoundationsClient {
     // Convert base64 audioStream to Buffer
     const audioBuffer = Buffer.from(result.audioStream, 'base64');
     
-    console.log('✅ Speech synthesis successful');
+    console.log('✅ Speech synthesis successful with ElevenLabs voice');
     return audioBuffer;
   }
 }
