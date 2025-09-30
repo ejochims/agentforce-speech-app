@@ -189,99 +189,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Voice mapping for ElevenLabs
+  // Voice mapping for AWS Polly (used by Einstein Speech)
   const voiceMapping: { [key: string]: string } = {
-    'shimmer': 'pNInz6obpgDQGcFmaJgB', // Adam - clear male voice (default)
-    'alloy': 'JBFqnCBsd6RMkjVDRZzb',   // George - mature male voice
-    'echo': 'TxGEqnHWrfWFTfGW9XjX',    // Josh - deep male voice
-    'fable': 'AZnzlk1XvdvUeBnXmlld',   // Domi - expressive female voice
-    'onyx': 'VR6AewLTigWG4xSOukaG',    // Arnold - strong male voice
-    'nova': 'EXAVITQu4vr4xnSDxMaL',    // Bella - expressive female voice
-    'allison': 'xctasy8XvGp2cVO9HL9k'  // Allison - millennial female voice
+    'shimmer': 'Matthew',   // Clear male voice
+    'alloy': 'Matthew',     // Male voice
+    'echo': 'Matthew',      // Deep male voice
+    'fable': 'Joanna',      // Female voice
+    'onyx': 'Matthew',      // Strong male voice
+    'nova': 'Joanna',       // Expressive female voice
+    'allison': 'Joanna'     // Female voice (default)
   };
 
 
-  // Text-to-Speech - Streaming version for faster playback
+  // Text-to-Speech using Einstein Speech
   app.get('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'allison', speed } = req.query;
+      const { text, voice = 'allison' } = req.query;
       
       if (!text || typeof text !== 'string') {
         return res.status(400).json({ error: 'Text is required' });
       }
 
-      if (!process.env.ELEVENLABS_API_KEY) {
-        return res.status(500).json({ error: 'ElevenLabs API key not configured' });
-      }
-
-      // Map voice name to ElevenLabs voice ID
+      // Map voice name to AWS Polly voice ID
       const voiceId = voiceMapping[voice as string] || voiceMapping['allison'];
       
-      // Set default speed: 1.10x for Allison, 1.0x for others
-      const defaultSpeed = voice === 'allison' ? 1.10 : 1.0;
-      const speechSpeed = speed ? parseFloat(speed as string) : defaultSpeed;
-      
-      console.log('TTS: Generating speech with ElevenLabs...', { text: text.substring(0, 50) + '...', voice, voiceId, speed: speechSpeed });
+      // Use Einstein Speech to synthesize
+      const audioBuffer = await speechFoundationsClient.synthesizeSpeech(text, voiceId);
 
-      // Call ElevenLabs TTS API
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-        method: 'POST',
-        headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_flash_v2_5', // Fast model for low latency
-          voice_settings: {
-            speed: speechSpeed,
-            stability: 0.32,        // 32% stability for Allison
-            similarity_boost: 0.54  // 54% similarity for Allison
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('ElevenLabs API error:', response.status, errorText);
-        throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
-      }
-
-      // Stream the response directly without buffering
+      // Stream the audio response
       res.set({
         'Content-Type': 'audio/mpeg',
-        'Transfer-Encoding': 'chunked',
+        'Content-Length': audioBuffer.length.toString(),
         'Cache-Control': 'no-cache',
       });
       
-      // Convert ReadableStream to Node.js stream for piping
-      const stream = response.body;
-      if (stream) {
-        const reader = stream.getReader();
-        const pump = (): Promise<void> => {
-          return reader.read().then(({ done, value }) => {
-            if (done) {
-              res.end();
-              return;
-            }
-            res.write(value);
-            return pump();
-          });
-        };
-        pump().catch((error: any) => {
-          console.error('TTS streaming error:', error);
-          res.status(500).json({ error: 'Streaming failed' });
-        });
-      } else {
-        throw new Error('No audio stream received from ElevenLabs');
-      }
+      res.send(audioBuffer);
     } catch (error) {
       console.error('Error generating speech:', error);
       
       // Provide detailed error message based on error type
       let errorMessage = 'Failed to generate speech';
       if (error instanceof Error) {
-        if (error.message.includes('API key') || error.message.includes('401')) {
+        if (error.message.includes('authentication') || error.message.includes('401')) {
           errorMessage = 'Speech generation service unavailable. Please try again later.';
         } else if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
           errorMessage = 'Network timeout. Please check your connection and try again.';
@@ -302,83 +251,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Keep POST endpoint for backward compatibility
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'allison', speed } = req.body;
+      const { text, voice = 'allison' } = req.body;
       
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
 
-      if (!process.env.ELEVENLABS_API_KEY) {
-        return res.status(500).json({ error: 'ElevenLabs API key not configured' });
-      }
-
-      // Map voice name to ElevenLabs voice ID
+      // Map voice name to AWS Polly voice ID
       const voiceId = voiceMapping[voice] || voiceMapping['allison'];
       
-      // Set default speed: 1.10x for Allison, 1.0x for others
-      const defaultSpeed = voice === 'allison' ? 1.10 : 1.0;
-      const speechSpeed = speed || defaultSpeed;
-      
-      console.log('TTS: Generating speech with ElevenLabs...', { text: text.substring(0, 50) + '...', voice, voiceId, speed: speechSpeed });
+      // Use Einstein Speech to synthesize
+      const audioBuffer = await speechFoundationsClient.synthesizeSpeech(text, voiceId);
 
-      // Call ElevenLabs TTS API
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-        method: 'POST',
-        headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_flash_v2_5', // Fast model for low latency
-          voice_settings: {
-            speed: speechSpeed,
-            stability: 0.32,        // 32% stability for Allison
-            similarity_boost: 0.54  // 54% similarity for Allison
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('ElevenLabs API error:', response.status, errorText);
-        throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
-      }
-
-      // Stream the response directly without buffering
+      // Stream the audio response
       res.set({
         'Content-Type': 'audio/mpeg',
-        'Transfer-Encoding': 'chunked',
+        'Content-Length': audioBuffer.length.toString(),
       });
       
-      // Convert ReadableStream to Node.js stream for piping
-      const stream = response.body;
-      if (stream) {
-        const reader = stream.getReader();
-        const pump = (): Promise<void> => {
-          return reader.read().then(({ done, value }) => {
-            if (done) {
-              res.end();
-              return;
-            }
-            res.write(value);
-            return pump();
-          });
-        };
-        pump().catch((error: any) => {
-          console.error('TTS streaming error:', error);
-          res.status(500).json({ error: 'Streaming failed' });
-        });
-      } else {
-        throw new Error('No audio stream received from ElevenLabs');
-      }
+      res.send(audioBuffer);
     } catch (error) {
       console.error('Error generating speech:', error);
       
       // Provide detailed error message based on error type
       let errorMessage = 'Failed to generate speech';
       if (error instanceof Error) {
-        if (error.message.includes('API key') || error.message.includes('401')) {
+        if (error.message.includes('authentication') || error.message.includes('401')) {
           errorMessage = 'Speech generation service unavailable. Please try again later.';
         } else if (error.message.includes('timeout') || error.message.includes('ECONNRESET')) {
           errorMessage = 'Network timeout. Please check your connection and try again.';
