@@ -13,9 +13,9 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 
-// Initialize OpenAI client
+// Initialize OpenAI client (optional - only used for fallback functionality)
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 // Configure multer for audio file uploads
 const upload = multer({
