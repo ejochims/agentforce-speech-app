@@ -64,6 +64,9 @@ export default function VoiceChat() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  
+  // Safari iOS workaround: Pre-create audio element during user gesture
+  const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Global keyboard navigation
   useEffect(() => {
@@ -399,6 +402,16 @@ export default function VoiceChat() {
     setRecordingState('recording');
     setRecordingError(null);
     console.log('Voice recording started');
+    
+    // Safari iOS workaround: Create audio element during user gesture
+    // This "blesses" the audio element so it can play later without autoplay restrictions
+    if (audioEnabled && !blessedAudioRef.current) {
+      const audio = new Audio();
+      (audio as any).playsInline = true;
+      audio.preload = 'auto';
+      blessedAudioRef.current = audio;
+      console.log('🎵 Created blessed audio element for Safari iOS');
+    }
   };
 
   const handleRecordingError = (error: string) => {
@@ -551,12 +564,20 @@ export default function VoiceChat() {
       // Use a unique URL with query params to enable audio streaming
       const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison&_t=${Date.now()}`;
       
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.src = audioUrl;
+      // Safari iOS workaround: Reuse blessed audio element if available
+      let audio: HTMLAudioElement;
+      if (blessedAudioRef.current) {
+        console.log('🎵 Reusing blessed audio element for Safari iOS');
+        audio = blessedAudioRef.current;
+        audio.src = audioUrl; // Update the source
+      } else {
+        // Fallback: Create new audio element (works on desktop browsers)
+        audio = new Audio();
+        audio.preload = 'auto';
+        audio.src = audioUrl;
+        (audio as any).playsInline = true;
+      }
       
-      // iOS Safari compatibility - set attributes for better playback
-      (audio as any).playsInline = true;
       audio.muted = false;
 
       // Return a promise that resolves when playback starts or fails
