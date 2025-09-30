@@ -1,0 +1,55 @@
+{
+  "name": "Agentforce Voice Chat",
+  "description": "A voice-enabled Progressive Web App for Salesforce Agentforce conversations",
+  "repository": "https://github.com/yourusername/agentforce-speech-app",
+  "keywords": ["salesforce", "agentforce", "voice", "pwa", "ai"],
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "addons": [
+    {
+      "plan": "heroku-postgresql:essential-0",
+      "as": "DATABASE"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production"
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key for fallback functionality",
+      "required": false
+    },
+    "SALESFORCE_DOMAIN_URL": {
+      "description": "Your Salesforce org domain URL (e.g., https://yourdomain.my.salesforce.com)",
+      "required": true
+    },
+    "SALESFORCE_CONSUMER_KEY": {
+      "description": "Salesforce Connected App Consumer Key for Agentforce",
+      "required": true
+    },
+    "SALESFORCE_CONSUMER_SECRET": {
+      "description": "Salesforce Connected App Consumer Secret for Agentforce",
+      "required": true
+    },
+    "SALESFORCE_AGENT_ID": {
+      "description": "Your Agentforce Agent ID",
+      "required": true
+    },
+    "SALESFORCE_SPEECH_DOMAIN_URL": {
+      "description": "Salesforce domain URL for Speech Foundations (can be same as main domain)",
+      "required": true
+    },
+    "SALESFORCE_SPEECH_CONSUMER_KEY": {
+      "description": "Connected App Consumer Key for Speech Foundations",
+      "required": true
+    },
+    "SALESFORCE_SPEECH_CONSUMER_SECRET": {
+      "description": "Connected App Consumer Secret for Speech Foundations",
+      "required": true
+    }
+  }
+}
