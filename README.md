@@ -2,6 +2,10 @@
 
 A production-ready Progressive Web App (PWA) that provides seamless voice conversation capabilities with Salesforce's Agentforce AI agents. Built with modern web technologies and optimized for mobile devices, especially iPhone.
 
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/ejochims/agentforce-speech-app)
+
+> **Quick Deploy:** Click the button above to deploy your own instance to Heroku in minutes. You'll need Salesforce Agentforce and Speech Foundations API credentials. See [SALESFORCE_SETUP.md](./SALESFORCE_SETUP.md) for setup instructions.
+
 ## ✨ Features
 
 ### 🎙️ Voice Conversation
