@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
 import { useState, useEffect } from 'react';
 
-const agentforceLogo = '/agentforce-icon-512.png';
+const agentforceLogo = '/agentforce-logo.png';
 
 interface MessageBubbleProps {
   message: string;

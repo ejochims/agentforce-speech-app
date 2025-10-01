@@ -32,7 +32,7 @@ import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
 import type { Conversation, Turn } from '@shared/schema';
 
-const agentforceLogo = '/agentforce-icon-512.png';
+const agentforceLogo = '/agentforce-logo.png';
 
 type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
