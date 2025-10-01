@@ -37,45 +37,90 @@ A production-ready Progressive Web App (PWA) that provides seamless voice conver
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
-- Access to Salesforce org with Agentforce
-- ElevenLabs API account
-- Salesforce Connected App credentials
+- Node.js 20+ 
+- **Salesforce org** with Agentforce and Speech Foundations API access
+- **Heroku account** (for deployment)
+- Salesforce **Connected App** credentials (OAuth 2.0 client credentials flow)
 
 ### Environment Variables
-Configure these secrets in your environment:
+
+This app requires several Salesforce API credentials. See detailed setup instructions in:
+- **[SALESFORCE_SETUP.md](./SALESFORCE_SETUP.md)** - Complete Salesforce configuration guide
+- **[HEROKU_DEPLOYMENT.md](./HEROKU_DEPLOYMENT.md)** - Heroku deployment instructions
+
+Quick reference - copy `.env.example` to `.env` and fill in your values:
 
 ```env
-# Salesforce Configuration
+# Salesforce Agentforce API
 SALESFORCE_DOMAIN_URL=https://your-domain.my.salesforce.com
-SALESFORCE_CONSUMER_KEY=your_connected_app_key
-SALESFORCE_CONSUMER_SECRET=your_connected_app_secret
+SALESFORCE_CONSUMER_KEY=your_connected_app_consumer_key
+SALESFORCE_CONSUMER_SECRET=your_connected_app_consumer_secret
 SALESFORCE_AGENT_ID=your_agentforce_agent_id
 
-# ElevenLabs Configuration
-ELEVENLABS_API_KEY=your_elevenlabs_api_key
+# Salesforce Speech Foundations API
+SALESFORCE_SPEECH_DOMAIN_URL=https://your-domain.my.salesforce.com
+SALESFORCE_SPEECH_CONSUMER_KEY=your_speech_consumer_key
+SALESFORCE_SPEECH_CONSUMER_SECRET=your_speech_consumer_secret
 
-# Session Security
-SESSION_SECRET=your_secure_random_string
+# Database (auto-set by Heroku)
+DATABASE_URL=postgresql://...
+
+# Optional
+OPENAI_API_KEY=sk-your-key-here
+NODE_ENV=development
 ```
 
 ### Installation & Setup
 
-1. **Clone and install dependencies:**
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/your-org/agentforce-speech-app.git
+   cd agentforce-speech-app
+   ```
+
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. **Configure your environment variables** (see above)
+3. **Set up Salesforce:**
+   - Follow the detailed guide in **[SALESFORCE_SETUP.md](./SALESFORCE_SETUP.md)**
+   - Create Connected Apps for Agentforce and Speech Foundations APIs
+   - Get your Agent ID from Salesforce
 
-3. **Start the development server:**
+4. **Configure environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Salesforce credentials
+   ```
+
+5. **Set up local database (optional for local dev):**
+   ```bash
+   # Install PostgreSQL locally, then:
+   npm run db:push
+   ```
+
+6. **Start the development server:**
    ```bash
    npm run dev
    ```
 
-4. **Access the app:**
+7. **Access the app:**
    - Local: `http://localhost:5000`
    - The app will automatically restart when you make changes
+
+### Deploy to Heroku
+
+For production deployment, see **[HEROKU_DEPLOYMENT.md](./HEROKU_DEPLOYMENT.md)**
+
+Quick deploy:
+```bash
+heroku create your-app-name
+heroku addons:create heroku-postgresql:essential-0
+# Set all environment variables (see HEROKU_DEPLOYMENT.md)
+git push heroku main
+heroku run npm run db:push
+```
 
 ## 🔧 Configuration
 
@@ -87,13 +132,20 @@ To use a different Agentforce agent within the same Salesforce org:
 3. Restart the application
 
 ### Voice Settings
-The app uses **ElevenLabs Allison - millennial** voice with optimized parameters:
-- **Model**: `eleven_flash_v2_5` (ultra-fast, ~75ms latency)
-- **Speed**: 1.10x for dynamic conversations
-- **Stability**: 32% for natural variation
-- **Similarity**: 54% for consistent tone
+The app uses **Salesforce Speech Foundations API** which leverages **ElevenLabs voices** internally:
+- **Default Voice**: Allison - millennial (natural, conversational female voice)
+- **Model**: Uses ElevenLabs' ultra-fast model (~75ms latency)
+- **Available Voices**: Configurable via voice mapping in `server/routes.ts`
 
-To modify voice settings, edit the TTS configuration in `server/routes.ts`.
+To change the default voice or add new voices, edit the `voiceMapping` object in `server/routes.ts`:
+```typescript
+const voiceMapping: { [key: string]: string } = {
+  'allison': 'xctasy8XvGp2cVO9HL9k',  // Default
+  'shimmer': 'pNInz6obpgDQGcFmaJgB',  // Clear male
+  'onyx': 'VR6AewLTigWG4xSOukaG',     // Strong male
+  // Add more ElevenLabs voice IDs here
+};
+```
 
 ### PWA Installation
 Users can install the app on their devices:
@@ -113,16 +165,19 @@ Users can install the app on their devices:
 ### Backend (`server/`)
 - **Express.js** server with TypeScript
 - **Salesforce Agentforce API** integration
-- **ElevenLabs** STT/TTS integration
-- **Session management** with secure storage
+- **Salesforce Speech Foundations API** integration (STT/TTS)
+- **PostgreSQL** database with Drizzle ORM
+- **Session management** with conversation persistence
 - **RESTful API** endpoints
 
 ### Key Components
 - `VoiceChat.tsx` - Main voice interaction interface
 - `VoiceRecordButton.tsx` - Audio recording with visual feedback
 - `MessageBubble.tsx` - Chat message display
-- `agentforce.ts` - Salesforce API client
-- `routes.ts` - API endpoints for STT/TTS/Agent
+- `agentforce.ts` - Salesforce Agentforce API client
+- `speech-foundations.ts` - Salesforce Speech Foundations API client
+- `routes.ts` - API endpoints for STT/TTS/Agent interactions
+- `storage.ts` - Database operations for conversations and turns
 
 ## 🎯 Usage
 
@@ -149,16 +204,18 @@ Users can install the app on their devices:
 ## 🔊 Audio Features
 
 ### Speech-to-Text (STT)
-- **ElevenLabs Scribe v1** model
-- Support for multiple audio formats (WebM, MP4, OGG)
-- Real-time transcription
-- Error handling with retry mechanisms
+- **Salesforce Einstein Transcribe** (Speech Foundations API)
+- Powered by industry-leading transcription models
+- Support for multiple audio formats (WebM, MP4, OGG, M4A)
+- Real-time transcription with high accuracy
+- Error handling with detailed feedback
 
 ### Text-to-Speech (TTS)  
-- **ElevenLabs eleven_flash_v2_5** model
+- **Salesforce Einstein Speech** (Speech Foundations API)
+- Powered by **ElevenLabs voices** for premium quality
 - Streaming audio for immediate playback
-- Premium Allison voice with millennial tone
-- Configurable speed and quality parameters
+- Multiple voice options (male/female, various tones)
+- Optimized for conversational interactions
 
 ### Audio Management
 - **Auto-initialization** on user return
@@ -217,14 +274,16 @@ When extending this application:
 - **iOS Safari issues**: Ensure user gesture before audio operations
 
 ### Salesforce Connection
-- **Agent errors**: Verify SALESFORCE_AGENT_ID is correct
-- **Authentication failures**: Check consumer key/secret
-- **Domain issues**: Ensure SALESFORCE_DOMAIN_URL format
+- **Agent errors**: Verify SALESFORCE_AGENT_ID is correct and agent is deployed
+- **Authentication failures**: Check consumer key/secret are correct
+- **Domain issues**: Ensure SALESFORCE_DOMAIN_URL format is `https://your-domain.my.salesforce.com`
+- **API permissions**: Verify Connected App has `einstein_gpt_api` scope
 
-### ElevenLabs Integration  
-- **STT failures**: Verify API key and quota
-- **TTS errors**: Check voice ID and model availability
-- **Rate limits**: Monitor API usage in ElevenLabs dashboard
+### Speech Foundations API  
+- **STT failures**: Verify Speech Foundations is enabled in your org
+- **TTS errors**: Check voice ID mapping in routes.ts
+- **Authentication issues**: Verify SALESFORCE_SPEECH_CONSUMER_KEY/SECRET
+- **Rate limits**: Monitor API usage in Salesforce Setup → Event Monitoring
 
 ---
 
