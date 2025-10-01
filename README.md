@@ -70,7 +70,6 @@ SALESFORCE_SPEECH_CONSUMER_SECRET=your_speech_consumer_secret
 DATABASE_URL=postgresql://...
 
 # Optional
-OPENAI_API_KEY=sk-your-key-here
 NODE_ENV=development
 ```
 

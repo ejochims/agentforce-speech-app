@@ -129,8 +129,8 @@ export class MemStorage implements IStorage {
         id: "default",
         voice: "alloy",
         language: "en-US",
-        sttProvider: "openai",
-        ttsProvider: "openai",
+        sttProvider: "salesforce",
+        ttsProvider: "salesforce",
         agentforceMode: "stub",
       };
     }

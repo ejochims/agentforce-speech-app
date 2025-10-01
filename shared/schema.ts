@@ -28,11 +28,11 @@ export const turns = pgTable("turns", {
 
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default("default"),
-  voice: varchar("voice").notNull().default("alloy"), // OpenAI TTS voices
+  voice: varchar("voice").notNull().default("allison"), // Salesforce Speech Foundations voices
   language: varchar("language").notNull().default("en-US"),
-  sttProvider: varchar("stt_provider").notNull().default("openai"), // openai, browser
-  ttsProvider: varchar("tts_provider").notNull().default("openai"), // openai, browser
-  agentforceMode: varchar("agentforce_mode").notNull().default("stub"), // stub, real
+  sttProvider: varchar("stt_provider").notNull().default("salesforce"), // salesforce, browser
+  ttsProvider: varchar("tts_provider").notNull().default("salesforce"), // salesforce, browser
+  agentforceMode: varchar("agentforce_mode").notNull().default("real"), // stub, real
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

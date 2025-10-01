@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS turns (
 
 CREATE TABLE IF NOT EXISTS settings (
   id VARCHAR PRIMARY KEY DEFAULT 'default',
-  voice VARCHAR NOT NULL DEFAULT 'alloy',
+  voice VARCHAR NOT NULL DEFAULT 'allison',
   language VARCHAR NOT NULL DEFAULT 'en-US',
-  stt_provider VARCHAR NOT NULL DEFAULT 'openai',
-  tts_provider VARCHAR NOT NULL DEFAULT 'openai',
-  agentforce_mode VARCHAR NOT NULL DEFAULT 'stub'
+  stt_provider VARCHAR NOT NULL DEFAULT 'salesforce',
+  tts_provider VARCHAR NOT NULL DEFAULT 'salesforce',
+  agentforce_mode VARCHAR NOT NULL DEFAULT 'real'
 );
 
