@@ -2,7 +2,7 @@
 
 A production-ready Progressive Web App (PWA) that enables seamless voice conversations with Salesforce Agentforce AI agents. Built with modern web technologies and optimized for mobile devices, especially iPhone.
 
-[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](http://bit.ly/4gShZEF)
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](http://sfdc.co/CGEon)
 
 ## ✨ Features
 
