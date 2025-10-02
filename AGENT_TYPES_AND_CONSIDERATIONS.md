@@ -1,4 +1,4 @@
-# Service Agent vs. Employee Agent Support
+# Service Agent and Employee Agent Considerations for the Prototype
 
 **TL;DR:** This prototype uses **Agentforce Service Agent**, which is the right choice for a demo/POC tool. Service Agent works without requiring user login, making it perfect for quick demos, customer-facing scenarios, and SE adoption. Adding Employee Agent support is technically feasible but requires significant authentication infrastructure that isn't necessary for most demo use cases.
 
