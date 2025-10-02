@@ -63,17 +63,17 @@ You'll need to:
 7. **Deploy** your agent to make it available
 8. Open the agent to view its details
 9. **Copy the Agent ID** from the URL
-   - The URL looks like: \`https://your-domain.lightning.force.com/lightning/setup/AgentBuilder/page?address=/0Xx...\`
-   - The Agent ID is the alphanumeric string after the last \`/\` (starts with \`0Xx\`)
-   - **Save this as:** \`SALESFORCE_AGENT_ID\`
+   - The URL looks like: `https://your-domain.lightning.force.com/lightning/setup/AgentBuilder/page?address=/0Xx...`
+   - The Agent ID is the alphanumeric string after the last `/` (starts with `0Xx`)
+   - **Save this as:** `SALESFORCE_AGENT_ID`
 
 ### Step 4: Get Your My Domain URL
 
 1. In Setup, search for **My Domain**
-2. Copy your full domain URL (e.g., \`https://your-domain.my.salesforce.com\`)
+2. Copy your full domain URL (e.g., `https://your-domain.my.salesforce.com`)
 3. **Save this as BOTH:**
-   - \`SALESFORCE_DOMAIN_URL\`
-   - \`SALESFORCE_SPEECH_DOMAIN_URL\` (yes, use the same URL for both!)
+   - `SALESFORCE_DOMAIN_URL`
+   - `SALESFORCE_SPEECH_DOMAIN_URL` (yes, use the same URL for both!)
 
 ---
 
@@ -86,14 +86,14 @@ This Connected App will provide access to the Agentforce API for agent conversat
 1. In Setup, go to **App Manager**
 2. Click **New Connected App**
 3. Fill in basic information:
-   - **Connected App Name:** \`Agentforce Voice Chat\` (or your preferred name)
+   - **Connected App Name:** `Agentforce Voice Chat` (or your preferred name)
    - **API Name:** (will auto-populate)
    - **Contact Email:** Your email address
 
 ### Step 2: Enable OAuth Settings
 
 1. Check the box: **Enable OAuth Settings**
-2. **Callback URL:** Enter \`https://login.salesforce.com\`
+2. **Callback URL:** Enter `https://login.salesforce.com`
 3. **Selected OAuth Scopes** - Add these scopes:
    - Access chatbot services (chatbot_api)
    - Access the Salesforce API Platform (sfap_api)
@@ -130,9 +130,9 @@ This Connected App will provide access to the Agentforce API for agent conversat
 1. From the Connected App page, click **Manage Consumer Details**
 2. Verify your identity (you may need to enter a verification code sent to your email)
 3. **Copy the Consumer Key**
-   - **Save this as:** \`SALESFORCE_CONSUMER_KEY\`
+   - **Save this as:** `SALESFORCE_CONSUMER_KEY`
 4. **Copy the Consumer Secret**
-   - **Save this as:** \`SALESFORCE_CONSUMER_SECRET\`
+   - **Save this as:** `SALESFORCE_CONSUMER_SECRET`
 
 ### Step 5: Add Connected App to Your Agent
 
@@ -163,14 +163,14 @@ This External Client App provides access to Salesforce's Speech Foundations API 
 1. In Setup, search for **External Client App Manager**
 2. Click **New**
 3. Fill in the details:
-   - **Name:** \`Speech Foundations API\` (or your preferred name)
+   - **Name:** `Speech Foundations API` (or your preferred name)
    - **Email:** Your email address
    - **Distribution State:** Keep as **Local**
 
 ### Step 2: Enable OAuth Settings
 
 1. In the **API** section, check **Enable OAuth** for the ECA
-2. **Callback URL:** Enter \`https://login.salesforce.com\`
+2. **Callback URL:** Enter `https://login.salesforce.com`
 3. **Selected OAuth Scopes** - Add these:
    - Access the Salesforce API Platform (sfap_api)
    - Manage user data via APIs (api)
@@ -204,9 +204,9 @@ This External Client App provides access to Salesforce's Speech Foundations API 
 3. Expand **OAuth Settings**
 4. Click **Consumer Key and Secret** (you may need to verify your identity)
 5. **Copy the Consumer Key**
-   - **Save this as:** \`SALESFORCE_SPEECH_CONSUMER_KEY\`
+   - **Save this as:** `SALESFORCE_SPEECH_CONSUMER_KEY`
 6. **Copy the Consumer Secret**
-   - **Save this as:** \`SALESFORCE_SPEECH_CONSUMER_SECRET\`
+   - **Save this as:** `SALESFORCE_SPEECH_CONSUMER_SECRET`
 
 ---
 
@@ -227,8 +227,8 @@ Now that you have all your Salesforce credentials, you're ready to deploy! We'll
 
 On the Heroku deployment page, you'll see a form to fill out:
 
-1. **App name:** Choose a unique name for your app (e.g., \`my-agentforce-demo-2024\`)
-   - This will be part of your URL: \`https://your-app-name.herokuapp.com\`
+1. **App name:** Choose a unique name for your app (e.g., `my-agentforce-demo-2024`)
+   - This will be part of your URL: `https://your-app-name.herokuapp.com`
    - Leave blank to let Heroku generate a random name
 
 2. **Choose a region:** Select the region closest to you or your users
@@ -241,18 +241,18 @@ Now fill in all the credentials you gathered from Parts 1-3. Paste your values i
 
 | Config Variable | Your Value |
 |----------------|------------|
-| \`SALESFORCE_DOMAIN_URL\` | \`https://your-domain.my.salesforce.com\` |
-| \`SALESFORCE_CONSUMER_KEY\` | Your Connected App Consumer Key |
-| \`SALESFORCE_CONSUMER_SECRET\` | Your Connected App Consumer Secret |
-| \`SALESFORCE_AGENT_ID\` | Your Agent ID (starts with \`0Xx\`) |
-| \`SALESFORCE_SPEECH_DOMAIN_URL\` | Same as \`SALESFORCE_DOMAIN_URL\` |
-| \`SALESFORCE_SPEECH_CONSUMER_KEY\` | Your External Client App Key |
-| \`SALESFORCE_SPEECH_CONSUMER_SECRET\` | Your External Client App Secret |
-| \`NODE_ENV\` | \`production\` |
+| `SALESFORCE_DOMAIN_URL` | `https://your-domain.my.salesforce.com` |
+| `SALESFORCE_CONSUMER_KEY` | Your Connected App Consumer Key |
+| `SALESFORCE_CONSUMER_SECRET` | Your Connected App Consumer Secret |
+| `SALESFORCE_AGENT_ID` | Your Agent ID (starts with `0Xx`) |
+| `SALESFORCE_SPEECH_DOMAIN_URL` | Same as `SALESFORCE_DOMAIN_URL` |
+| `SALESFORCE_SPEECH_CONSUMER_KEY` | Your External Client App Key |
+| `SALESFORCE_SPEECH_CONSUMER_SECRET` | Your External Client App Secret |
+| `NODE_ENV` | `production` |
 
-> **⚠️ IMPORTANT:** Both domain URLs **MUST** start with \`https://\` (include the protocol!)
-> - ✅ Correct: \`https://your-domain.my.salesforce.com\`
-> - ❌ Wrong: \`your-domain.my.salesforce.com\` (missing https://)
+> **⚠️ IMPORTANT:** Both domain URLs **MUST** start with `https://` (include the protocol!)
+> - ✅ Correct: `https://your-domain.my.salesforce.com`
+> - ❌ Wrong: `your-domain.my.salesforce.com` (missing https://)
 
 **Double-check:** Make sure there are no extra spaces before or after your values!
 
@@ -278,7 +278,7 @@ After deployment completes, verify the database was created:
 4. You should see **"Heroku Postgres"** listed under "Add-ons"
 
 **If you DON'T see PostgreSQL:**
-1. In the "Add-ons" section, type \`postgres\` in the search box
+1. In the "Add-ons" section, type `postgres` in the search box
 2. Select **"Heroku Postgres"**
 3. Choose the **"Essential-0"** plan ($5/month)
 4. Click **"Submit Order Form"**
@@ -290,19 +290,19 @@ The database tables should be created automatically. Only do this step if you se
 
 1. On your app's dashboard, click the **"More"** dropdown (top right)
 2. Select **"Run console"**
-3. In the command box, type: \`npm run db:push\`
+3. In the command box, type: `npm run db:push`
 4. Click **"Run"**
 5. Wait for the command to complete (you'll see database migration messages)
 6. Click **"Close"** when done
 
-> **CLI Alternative:** \`heroku run "npm run db:push" -a your-app-name\`
+> **CLI Alternative:** `heroku run "npm run db:push" -a your-app-name`
 
 ### Step 7: Open Your App!
 
 1. Back on your app's dashboard, click **"Open app"** (top right corner)
 2. Your Agentforce Speech App will open in a new tab! 🎉
 
-Your app is now live at: \`https://your-app-name.herokuapp.com\`
+Your app is now live at: `https://your-app-name.herokuapp.com`
 
 ---
 
@@ -312,15 +312,15 @@ Before deploying, confirm you have all these values:
 
 | Variable | Source | Example |
 |----------|--------|---------|
-| \`SALESFORCE_DOMAIN_URL\` | Setup → My Domain | \`https://mydomain.my.salesforce.com` |
-| \`SALESFORCE_CONSUMER_KEY\` | Connected App → Consumer Key | \`3MVG9VTfp...\` |
-| \`SALESFORCE_CONSUMER_SECRET\` | Connected App → Consumer Secret | \`2A7BAEB06F...\` |
-| \`SALESFORCE_AGENT_ID\` | Agent URL | \`0XxHu000000jyjAKAQ\` |
-| \`SALESFORCE_SPEECH_DOMAIN_URL\` | Same as Domain URL | \`https://mydomain.my.salesforce.com\` |
-| \`SALESFORCE_SPEECH_CONSUMER_KEY\` | External Client App → Consumer Key | \`3MVG9VTfp...\` |
-| \`SALESFORCE_SPEECH_CONSUMER_SECRET\` | External Client App → Consumer Secret | \`FE3012648B...\` |
-| \`NODE_ENV\` | Set manually | \`production\` |
-| \`DATABASE_URL\` | Auto-set by Heroku | (automatic) |
+| `SALESFORCE_DOMAIN_URL` | Setup → My Domain | `https://mydomain.my.salesforce.com` |
+| `SALESFORCE_CONSUMER_KEY` | Connected App → Consumer Key | `3MVG9VTfp...` |
+| `SALESFORCE_CONSUMER_SECRET` | Connected App → Consumer Secret | `2A7BAEB06F...` |
+| `SALESFORCE_AGENT_ID` | Agent URL | `0XxHu000000jyjAKAQ` |
+| `SALESFORCE_SPEECH_DOMAIN_URL` | Same as Domain URL | `https://mydomain.my.salesforce.com` |
+| `SALESFORCE_SPEECH_CONSUMER_KEY` | External Client App → Consumer Key | `3MVG9VTfp...` |
+| `SALESFORCE_SPEECH_CONSUMER_SECRET` | External Client App → Consumer Secret | `FE3012648B...` |
+| `NODE_ENV` | Set manually | `production` |
+| `DATABASE_URL` | Auto-set by Heroku | (automatic) |
 
 ---
 
@@ -328,14 +328,14 @@ Before deploying, confirm you have all these values:
 
 ### 1. Check the Logs
 
-\`\`\`bash
+```bash
 heroku logs --tail
-\`\`\`
+```
 
 Look for these success messages:
-- \`✅ OAuth successful - instance URL: ...\`
-- \`✅ Speech Foundations token obtained successfully\`
-- \`serving on port ...\`
+- `✅ OAuth successful - instance URL: ...`
+- `✅ Speech Foundations token obtained successfully`
+- `serving on port ...`
 
 ### 2. Test Voice Interaction
 
@@ -372,9 +372,9 @@ All of these tasks can be done from the Heroku web dashboard. Go to https://dash
 4. Click **"Reveal Config Vars"** to see all your environment variables
 
 **CLI Alternative:**
-\`\`\`bash
+```bash
 heroku config -a your-app-name
-\`\`\`
+```
 
 ### View Logs
 
@@ -385,9 +385,9 @@ heroku config -a your-app-name
 4. Logs will stream in real-time
 
 **CLI Alternative:**
-\`\`\`bash
+```bash
 heroku logs --tail -a your-app-name
-\`\`\`
+```
 
 ### Update an Environment Variable
 
@@ -401,9 +401,9 @@ heroku logs --tail -a your-app-name
 7. The app will automatically restart
 
 **CLI Alternative:**
-\`\`\`bash
+```bash
 heroku config:set SALESFORCE_AGENT_ID=new_agent_id -a your-app-name
-\`\`\`
+```
 
 ### Check App Status
 
@@ -413,9 +413,9 @@ heroku config:set SALESFORCE_AGENT_ID=new_agent_id -a your-app-name
 3. See if dynos are running or sleeping
 
 **CLI Alternative:**
-\`\`\`bash
+```bash
 heroku ps -a your-app-name
-\`\`\`
+```
 
 ### Restart the App
 
@@ -425,22 +425,22 @@ heroku ps -a your-app-name
 3. Confirm the restart
 
 **CLI Alternative:**
-\`\`\`bash
+```bash
 heroku restart -a your-app-name
-\`\`\`
+```
 
 ### Run Database Migrations Again
 
 **Web UI:**
 1. Click **"More"** dropdown
 2. Select **"Run console"**
-3. Type: \`npm run db:push\`
+3. Type: `npm run db:push`
 4. Click **"Run"**
 
 **CLI Alternative:**
-\`\`\`bash
+```bash
 heroku run "npm run db:push" -a your-app-name
-\`\`\`
+```
 
 ---
 
@@ -555,10 +555,10 @@ If you encounter issues:
 
 1. **Check the logs:** 
    - Web UI: Heroku dashboard → More → View logs
-   - CLI: \`heroku logs --tail -a your-app-name\`
+   - CLI: `heroku logs --tail -a your-app-name`
 2. **Verify all environment variables:** 
    - Web UI: Heroku dashboard → Settings → Reveal Config Vars
-   - CLI: \`heroku config -a your-app-name\`
+   - CLI: `heroku config -a your-app-name`
 3. **Review this guide** - did you complete all steps?
 4. **Slack:** Post in your team's Salesforce/Agentforce channel
 5. **GitHub:** Open an issue at the repository
@@ -572,14 +572,14 @@ You now have a fully functional Agentforce Speech App deployed and ready for dem
 **Your app URL:** 
 - Find it on your Heroku dashboard (top of the page)
 - Click **"Open app"** to launch it
-- URL format: \`https://your-app-name.herokuapp.com\`
+- URL format: `https://your-app-name.herokuapp.com`
 
 Share the URL with stakeholders, install it as a PWA on your phone, and start showcasing the power of Agentforce with voice interactions!
 
 ### Quick Access
 
 Bookmark these for easy access:
-- **Your app:** \`https://your-app-name.herokuapp.com\`
+- **Your app:** `https://your-app-name.herokuapp.com`
 - **Heroku dashboard:** https://dashboard.heroku.com/apps/your-app-name
 - **GitHub repo:** https://github.com/ejochims/agentforce-speech-app
 
@@ -589,7 +589,7 @@ Bookmark these for easy access:
 
 Just click the "Deploy to Heroku" button again! You can:
 - Use the same Salesforce credentials for multiple deployments
-- Create different apps for different agents (just change the \`SALESFORCE_AGENT_ID\`)
+- Create different apps for different agents (just change the `SALESFORCE_AGENT_ID`)
 - Deploy separate instances for different demos or customers
 
 Each deployment is independent and has its own database and conversations.
