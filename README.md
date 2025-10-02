@@ -308,7 +308,7 @@ Before deploying, confirm you have all these values:
 
 | Variable | Source | Example |
 |----------|--------|---------|
-| \`SALESFORCE_DOMAIN_URL\` | Setup → My Domain | \`https://mydomain.my.salesforce.com\` |
+| \`SALESFORCE_DOMAIN_URL\` | Setup → My Domain | \`https://mydomain.my.salesforce.com` |
 | \`SALESFORCE_CONSUMER_KEY\` | Connected App → Consumer Key | \`3MVG9VTfp...\` |
 | \`SALESFORCE_CONSUMER_SECRET\` | Connected App → Consumer Secret | \`2A7BAEB06F...\` |
 | \`SALESFORCE_AGENT_ID\` | Agent URL | \`0XxHu000000jyjAKAQ\` |
