@@ -250,6 +250,10 @@ Now fill in all the credentials you gathered from Parts 1-3. Paste your values i
 | \`SALESFORCE_SPEECH_CONSUMER_SECRET\` | Your External Client App Secret |
 | \`NODE_ENV\` | \`production\` |
 
+> **⚠️ IMPORTANT:** Both domain URLs **MUST** start with \`https://\` (include the protocol!)
+> - ✅ Correct: \`https://your-domain.my.salesforce.com\`
+> - ❌ Wrong: \`your-domain.my.salesforce.com\` (missing https://)
+
 **Double-check:** Make sure there are no extra spaces before or after your values!
 
 ### Step 4: Deploy the App
@@ -443,6 +447,20 @@ heroku run "npm run db:push" -a your-app-name
 ## ❗ Troubleshooting
 
 > **First Step for Any Issue:** Check your logs! Go to your Heroku dashboard → More → View logs to see what's happening.
+
+### "Failed to parse URL" Error
+
+**Problem:** Error message like "Failed to parse URL from your-domain.my.salesforce.com"
+
+**Cause:** Missing `https://` in domain URL configuration
+
+**Solution:**
+1. Go to Heroku dashboard → **Settings** → **Config Vars**
+2. Find `SALESFORCE_DOMAIN_URL` and `SALESFORCE_SPEECH_DOMAIN_URL`
+3. Make sure both start with `https://`
+   - ❌ Wrong: `your-domain.my.salesforce.com`
+   - ✅ Correct: `https://your-domain.my.salesforce.com`
+4. Save changes (app restarts automatically)
 
 ### "Authentication failed" Error
 
