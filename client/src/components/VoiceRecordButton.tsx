@@ -6,6 +6,7 @@ import AudioVisualizer from './AudioVisualizer';
 type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
 interface VoiceRecordButtonProps {
+  onBeforeRecording?: () => Promise<void> | void; // Called BEFORE recording starts
   onRecordingStart?: () => void;
   onRecordingStop?: (audioBlob?: Blob) => void;
   onError?: (error: string) => void;
@@ -16,6 +17,7 @@ interface VoiceRecordButtonProps {
 }
 
 export default function VoiceRecordButton({ 
+  onBeforeRecording,
   onRecordingStart, 
   onRecordingStop, 
   onError,
@@ -48,6 +50,14 @@ export default function VoiceRecordButton({
   const startRecording = async () => {
     try {
       console.log('Attempting to start recording...');
+      
+      // CRITICAL: Call onBeforeRecording FIRST (e.g., to unlock audio on Safari iOS)
+      // This must happen before mic access to avoid conflicts
+      if (onBeforeRecording) {
+        console.log('🎯 Calling onBeforeRecording hook...');
+        await onBeforeRecording();
+        console.log('✓ onBeforeRecording completed');
+      }
       
       // Check for media device support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {

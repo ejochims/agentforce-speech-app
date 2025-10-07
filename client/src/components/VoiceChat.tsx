@@ -67,6 +67,7 @@ export default function VoiceChat() {
   
   // Safari iOS workaround: Pre-create audio element during user gesture
   const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isAudioUnlockingRef = useRef<boolean>(false);
 
   // Global keyboard navigation
   useEffect(() => {
@@ -397,22 +398,23 @@ export default function VoiceChat() {
   // Removed auto-scroll to prevent interference with user interactions
   // Users can manually scroll to see new messages
 
-  const handleRecordingStart = async () => {
-    setIsRecording(true);
-    setRecordingState('recording');
-    setRecordingError(null);
-    console.log('Voice recording started');
+  // Unlock audio for Safari iOS - must be called BEFORE starting recording
+  const unlockAudioForSafari = async () => {
+    // Prevent multiple simultaneous unlock attempts
+    if (isAudioUnlockingRef.current || blessedAudioRef.current) {
+      return;
+    }
     
-    // Safari iOS workaround: ALWAYS create and unlock audio on first user gesture
-    // This "blesses" the audio element so it can play later without autoplay restrictions
-    if (!blessedAudioRef.current) {
+    isAudioUnlockingRef.current = true;
+    
+    try {
       console.log('🔓 Unlocking audio for Safari iOS on user gesture...');
       const audio = new Audio();
       (audio as any).playsInline = true;
       audio.preload = 'auto';
       
       // Play silent audio to unlock Safari's audio restrictions
-      // This MUST happen during the user gesture
+      // This MUST happen during the user gesture, BEFORE recording starts
       const silentAudio = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
       audio.src = silentAudio;
       audio.muted = false;
@@ -438,7 +440,16 @@ export default function VoiceChat() {
         localStorage.setItem('audioEnabled', 'true');
         setShowAudioPrompt(false);
       }
+    } finally {
+      isAudioUnlockingRef.current = false;
     }
+  };
+
+  const handleRecordingStart = () => {
+    setIsRecording(true);
+    setRecordingState('recording');
+    setRecordingError(null);
+    console.log('Voice recording started');
   };
 
   const handleRecordingError = (error: string) => {
@@ -1224,6 +1235,7 @@ export default function VoiceChat() {
             <div className="flex flex-col items-center gap-lg">
               <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
                 <VoiceRecordButton
+                  onBeforeRecording={unlockAudioForSafari}
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
                   onError={handleRecordingError}
