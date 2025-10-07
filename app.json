@@ -1,8 +1,9 @@
 {
   "name": "Agentforce Voice Chat",
   "description": "A voice-enabled Progressive Web App for Salesforce Agentforce conversations",
-  "repository": "https://github.com/yourusername/agentforce-speech-app",
+  "repository": "https://github.com/ejochims/agentforce-speech-app",
   "keywords": ["salesforce", "agentforce", "voice", "pwa", "ai"],
+  "logo": "https://raw.githubusercontent.com/ejochims/agentforce-speech-app/main/public/agentforce-icon-512.png",
   "buildpacks": [
     {
       "url": "heroku/nodejs"
@@ -18,10 +19,6 @@
     "NODE_ENV": {
       "description": "Node environment",
       "value": "production"
-    },
-    "OPENAI_API_KEY": {
-      "description": "OpenAI API key for fallback functionality",
-      "required": false
     },
     "SALESFORCE_DOMAIN_URL": {
       "description": "Your Salesforce org domain URL (e.g., https://yourdomain.my.salesforce.com)",
@@ -51,5 +48,8 @@
       "description": "Connected App Consumer Secret for Speech Foundations",
       "required": true
     }
+  },
+  "scripts": {
+    "postdeploy": "node init-db.js"
   }
 }

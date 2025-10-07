@@ -3,7 +3,6 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { agentforceClient } from "./agentforce";
 import { speechFoundationsClient } from "./speech-foundations";
-import OpenAI from "openai";
 import { 
   insertConversationSchema, 
   insertTurnSchema, 
@@ -12,10 +11,6 @@ import {
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-
-// Initialize OpenAI client (optional - only used for fallback functionality)
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 // Configure multer for audio file uploads
 const upload = multer({

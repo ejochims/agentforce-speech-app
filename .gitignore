@@ -1,10 +1,50 @@
+# Dependencies
 node_modules
+
+# Build outputs
 dist
-.DS_Store
 server/public
-vite.config.ts.*
-*.tar.gz
+
+# Environment variables
 .env
 .env.local
 .env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Salesforce
+.sfdx
+.sf
+.salesforce
+sfdx-project.json
+*.dup
+
+# Uploaded files
+uploads/
+*.mp3
+*.mp4
+*.wav
+*.webm
+*.m4a
+*.ogg
+
+# OS files
+.DS_Store
 .local
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Misc
+*.tar.gz
+vite.config.ts.*
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

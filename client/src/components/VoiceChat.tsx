@@ -30,8 +30,9 @@ import MessageBubble from './MessageBubble';
 import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
-import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
 import type { Conversation, Turn } from '@shared/schema';
+
+const agentforceLogo = '/agentforce-logo.png';
 
 type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 

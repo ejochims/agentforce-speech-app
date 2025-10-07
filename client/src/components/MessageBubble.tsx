@@ -1,8 +1,9 @@
 import { Bot, User, CheckCheck, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
-import agentforceLogo from '@assets/agentforce logo_1758045885910.png';
 import { useState, useEffect } from 'react';
+
+const agentforceLogo = '/agentforce-logo.png';
 
 interface MessageBubbleProps {
   message: string;
