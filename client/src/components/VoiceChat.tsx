@@ -449,6 +449,13 @@ export default function VoiceChat() {
         console.log(`✓ Audio unlocked successfully (${mode})`);
         audio.pause();
         audio.currentTime = 0;
+        
+        // CRITICAL: Give iOS time to release the audio session before starting recording
+        // In standalone mode, this is especially important as iOS manages audio sessions more strictly
+        const delayMs = isStandalone.current ? 150 : 50;
+        console.log(`⏱️ Waiting ${delayMs}ms for audio session cleanup...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        console.log(`✓ Audio session cleanup complete`);
       } catch (e) {
         console.warn('⚠️ Silent audio play failed (may still work):', e);
       }
