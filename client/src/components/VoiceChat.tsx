@@ -397,20 +397,47 @@ export default function VoiceChat() {
   // Removed auto-scroll to prevent interference with user interactions
   // Users can manually scroll to see new messages
 
-  const handleRecordingStart = () => {
+  const handleRecordingStart = async () => {
     setIsRecording(true);
     setRecordingState('recording');
     setRecordingError(null);
     console.log('Voice recording started');
     
-    // Safari iOS workaround: Create audio element during user gesture
+    // Safari iOS workaround: ALWAYS create and unlock audio on first user gesture
     // This "blesses" the audio element so it can play later without autoplay restrictions
-    if (audioEnabled && !blessedAudioRef.current) {
+    if (!blessedAudioRef.current) {
+      console.log('🔓 Unlocking audio for Safari iOS on user gesture...');
       const audio = new Audio();
       (audio as any).playsInline = true;
       audio.preload = 'auto';
+      
+      // Play silent audio to unlock Safari's audio restrictions
+      // This MUST happen during the user gesture
+      const silentAudio = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
+      audio.src = silentAudio;
+      audio.muted = false;
+      audio.volume = 0.01; // Very quiet but not muted
+      
+      try {
+        // This play() call during user gesture unlocks audio for the session
+        await audio.play();
+        console.log('✓ Audio unlocked successfully for Safari iOS');
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (e) {
+        console.warn('⚠️ Silent audio play failed (may still work):', e);
+      }
+      
       blessedAudioRef.current = audio;
       console.log('🎵 Created blessed audio element for Safari iOS');
+      
+      // If audio isn't enabled yet but we just unlocked it, auto-enable
+      if (!audioEnabled) {
+        console.log('🔊 Auto-enabling audio after successful unlock');
+        setAudioEnabled(true);
+        localStorage.setItem('audioEnabled', 'true');
+        setShowAudioPrompt(false);
+      }
     }
   };
 
@@ -572,13 +599,16 @@ export default function VoiceChat() {
         audio.src = audioUrl; // Update the source
       } else {
         // Fallback: Create new audio element (works on desktop browsers)
+        console.log('🎵 Creating new audio element (desktop or no blessed audio)');
         audio = new Audio();
         audio.preload = 'auto';
         audio.src = audioUrl;
         (audio as any).playsInline = true;
       }
       
+      // Ensure audio is not muted and has proper volume
       audio.muted = false;
+      audio.volume = 1.0; // Restore full volume (might have been lowered during unlock)
 
       // Return a promise that resolves when playback starts or fails
       return new Promise((resolve) => {
@@ -589,6 +619,7 @@ export default function VoiceChat() {
         };
 
         const onCanPlay = () => {
+          console.log('🎵 Audio canplay event fired, attempting playback...');
           audio.play()
             .then(() => {
               console.log('✓ Audio playback started successfully');
@@ -598,9 +629,14 @@ export default function VoiceChat() {
             .catch((playError) => {
               const errorDetails = {
                 message: playError instanceof Error ? playError.message : String(playError),
-                name: playError instanceof Error ? playError.name : 'Unknown'
+                name: playError instanceof Error ? playError.name : 'Unknown',
+                audioEnabled,
+                blessedAudioExists: !!blessedAudioRef.current,
+                audioSrc: audio.src,
+                audioReadyState: audio.readyState
               };
               console.error('❌ Audio play failed:', errorDetails);
+              console.error('💡 Hint: If on iOS Safari, make sure audio was unlocked during user gesture');
               // Store as pending for later manual play
               setIsAudioPlaying(false);
               setPendingAudioText(text);
