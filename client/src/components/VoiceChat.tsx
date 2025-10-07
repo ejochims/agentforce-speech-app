@@ -412,16 +412,16 @@ export default function VoiceChat() {
   // Removed auto-scroll to prevent interference with user interactions
   // Users can manually scroll to see new messages
 
-  // Unlock audio for Safari iOS - must be called BEFORE starting recording
+  // Unlock audio for Safari iOS - called when we need to play audio
+  // In standalone PWA mode, we DON'T call this before recording to avoid conflicts
   const unlockAudioForSafari = async () => {
-    // In standalone mode (PWA), always re-unlock audio to be safe
-    // Otherwise, prevent multiple simultaneous unlock attempts
+    // Prevent multiple simultaneous unlock attempts
     if (isAudioUnlockingRef.current) {
       return;
     }
     
-    // Skip if already unlocked (unless in standalone mode where we re-unlock to be safe)
-    if (blessedAudioRef.current && !isStandalone.current) {
+    // Skip if already unlocked
+    if (blessedAudioRef.current) {
       console.log('🎵 Audio already unlocked, skipping');
       return;
     }
@@ -430,42 +430,20 @@ export default function VoiceChat() {
     
     try {
       const mode = isStandalone.current ? '📱 Standalone PWA' : '🌐 Browser';
-      console.log(`🔓 Unlocking audio for Safari iOS (${mode}) on user gesture...`);
+      console.log(`🔓 Unlocking audio for Safari iOS (${mode})...`);
       
       const audio = new Audio();
       (audio as any).playsInline = true;
       audio.preload = 'auto';
       
-      // Play silent audio to unlock Safari's audio restrictions
-      // This MUST happen during the user gesture, BEFORE recording starts
-      const silentAudio = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
-      audio.src = silentAudio;
-      audio.muted = false;
-      audio.volume = 0.01; // Very quiet but not muted
-      
-      try {
-        // This play() call during user gesture unlocks audio for the session
-        await audio.play();
-        console.log(`✓ Audio unlocked successfully (${mode})`);
-        audio.pause();
-        audio.currentTime = 0;
-        
-        // CRITICAL: Give iOS time to release the audio session before starting recording
-        // In standalone mode, this is especially important as iOS manages audio sessions more strictly
-        const delayMs = isStandalone.current ? 150 : 50;
-        console.log(`⏱️ Waiting ${delayMs}ms for audio session cleanup...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        console.log(`✓ Audio session cleanup complete`);
-      } catch (e) {
-        console.warn('⚠️ Silent audio play failed (may still work):', e);
-      }
-      
+      // Just create the blessed audio element - don't play anything
+      // This is enough to unlock Safari in most cases
       blessedAudioRef.current = audio;
       console.log('🎵 Created blessed audio element for Safari iOS');
       
-      // If audio isn't enabled yet but we just unlocked it, auto-enable
+      // If audio isn't enabled yet, auto-enable it
       if (!audioEnabled) {
-        console.log('🔊 Auto-enabling audio after successful unlock');
+        console.log('🔊 Auto-enabling audio');
         setAudioEnabled(true);
         localStorage.setItem('audioEnabled', 'true');
         setShowAudioPrompt(false);
@@ -625,6 +603,13 @@ export default function VoiceChat() {
         console.log('🔇 Audio disabled, storing as pending:', text.substring(0, 50) + '...');
         setPendingAudioText(text);
         return false;
+      }
+
+      // CRITICAL: Unlock audio on first playback attempt if not already unlocked
+      // This is especially important in standalone PWA mode where we skip unlock before recording
+      if (!blessedAudioRef.current) {
+        console.log('🔓 First audio playback - unlocking audio for Safari iOS...');
+        await unlockAudioForSafari();
       }
 
       console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
@@ -1265,7 +1250,11 @@ export default function VoiceChat() {
             <div className="flex flex-col items-center gap-lg">
               <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
                 <VoiceRecordButton
-                  onBeforeRecording={unlockAudioForSafari}
+                  onBeforeRecording={
+                    // In standalone PWA mode, skip audio unlock before recording to avoid conflicts
+                    // Audio will be unlocked later when we need to play TTS
+                    isStandalone.current ? undefined : unlockAudioForSafari
+                  }
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
                   onError={handleRecordingError}
