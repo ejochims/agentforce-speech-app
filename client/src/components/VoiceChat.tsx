@@ -68,6 +68,20 @@ export default function VoiceChat() {
   // Safari iOS workaround: Pre-create audio element during user gesture
   const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
   const isAudioUnlockingRef = useRef<boolean>(false);
+  
+  // Detect if running as standalone PWA (home screen app)
+  const isStandalone = useRef<boolean>(
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+
+  // Log app mode on startup
+  useEffect(() => {
+    const mode = isStandalone.current ? '📱 Standalone PWA (Home Screen)' : '🌐 Browser Mode';
+    console.log(`🚀 Agentforce Voice App starting in ${mode}`);
+    console.log(`🔊 Audio enabled: ${audioEnabled}`);
+  }, []); // Run once on mount
 
   // Global keyboard navigation
   useEffect(() => {
@@ -400,15 +414,24 @@ export default function VoiceChat() {
 
   // Unlock audio for Safari iOS - must be called BEFORE starting recording
   const unlockAudioForSafari = async () => {
-    // Prevent multiple simultaneous unlock attempts
-    if (isAudioUnlockingRef.current || blessedAudioRef.current) {
+    // In standalone mode (PWA), always re-unlock audio to be safe
+    // Otherwise, prevent multiple simultaneous unlock attempts
+    if (isAudioUnlockingRef.current) {
+      return;
+    }
+    
+    // Skip if already unlocked (unless in standalone mode where we re-unlock to be safe)
+    if (blessedAudioRef.current && !isStandalone.current) {
+      console.log('🎵 Audio already unlocked, skipping');
       return;
     }
     
     isAudioUnlockingRef.current = true;
     
     try {
-      console.log('🔓 Unlocking audio for Safari iOS on user gesture...');
+      const mode = isStandalone.current ? '📱 Standalone PWA' : '🌐 Browser';
+      console.log(`🔓 Unlocking audio for Safari iOS (${mode}) on user gesture...`);
+      
       const audio = new Audio();
       (audio as any).playsInline = true;
       audio.preload = 'auto';
@@ -423,7 +446,7 @@ export default function VoiceChat() {
       try {
         // This play() call during user gesture unlocks audio for the session
         await audio.play();
-        console.log('✓ Audio unlocked successfully for Safari iOS');
+        console.log(`✓ Audio unlocked successfully (${mode})`);
         audio.pause();
         audio.currentTime = 0;
       } catch (e) {
