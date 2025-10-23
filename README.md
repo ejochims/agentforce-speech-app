@@ -84,7 +84,7 @@ This Connected App will provide access to the Agentforce API for agent conversat
 ### Step 1: Create the Connected App
 
 1. In Setup, go to **App Manager**
-2. Click **New Connected App**
+2. Click **New External Client App**
 3. Fill in basic information:
    - **Connected App Name:** `Agentforce Voice Chat` (or your preferred name)
    - **API Name:** (will auto-populate)
