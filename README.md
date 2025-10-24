@@ -154,6 +154,23 @@ Before the API can access your agent, you must connect the app to it:
 
 > **Important:** Without this step, your API calls will fail with authentication errors!
 
+### Step 6: Add Connected App to Your User 
+
+In order to allow the voice UI to access the voice connected application that was created in part two, we must create a permission set providing access to the connect app, and assign that permission set to the admin user that was used in the Client Credentials Flow section.
+
+To do that, follow these steps:
+1. Setup -> Permission Sets
+2. Click New
+3. Create a label like "Agentforce Voice Connect App Permissions" - this will populate the API Name
+4. Click Save
+5. Select Assigned Connected Apps
+6. Click Edit
+7. Find and select the connected app that was created in Part 2
+8. Click Save
+9. Click Close
+10. Click Manage Assignments then Add Assignment
+11. Select you user, click Next then Assign
+
 ---
 
 ## Part 3: Create External Client App for Speech Foundations API
