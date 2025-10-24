@@ -84,8 +84,9 @@ This Connected App will provide access to the Agentforce API for agent conversat
 ### Step 1: Create the Connected App
 
 1. In Setup, go to **External Client Apps** >> **Settings
-2. Toggle on "Allow Creation of Connected Apps" Click **New External Client App**
-3. Fill in basic information:
+2. Toggle on Allow access to External Client App consumer secrets via REST API
+3. Toggle on "Allow Creation of Connected Apps" Click **New External Client App**
+4. Fill in basic information:
    - **Connected App Name:** `Agentforce Voice Chat` (or your preferred name)
    - **API Name:** (will auto-populate)
    - **Contact Email:** Your email address
@@ -127,11 +128,12 @@ This Connected App will provide access to the Agentforce API for agent conversat
 
 ### Step 4: Get Consumer Key and Secret
 
-1. From the Connected App page, click **Manage Consumer Details**
-2. Verify your identity (you may need to enter a verification code sent to your email)
-3. **Copy the Consumer Key**
+1. Go to Setup > App Manager > Click the arrow to the right of the app you just created and select VIEW
+2. Then click the "Manage Consumer Details" Button. 
+3. Verify your identity (you may need to enter a verification code sent to your email)
+4. **Copy the Consumer Key**
    - **Save this as:** `SALESFORCE_CONSUMER_KEY`
-4. **Copy the Consumer Secret**
+5. **Copy the Consumer Secret**
    - **Save this as:** `SALESFORCE_CONSUMER_SECRET`
 
 ### Step 5: Add Connected App to Your Agent
