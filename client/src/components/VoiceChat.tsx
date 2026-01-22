@@ -353,16 +353,19 @@ export default function VoiceChat() {
   const { mutate: getAgentResponse, isPending: agentPending } = useMutation({
     mutationFn: ({ text, conversationId }: { text: string; conversationId: string }) =>
       apiRequest('/api/agentforce', { method: 'POST', body: { text, conversationId } }),
-    onSuccess: (response: { text: string; conversationId: string }) => {
+    onSuccess: (response: { text: string; textForUi?: string; hasHtml?: boolean; conversationId: string }) => {
       if (currentConversationId) {
-        // Start TTS immediately for faster playback - don't wait for UI updates
+        // Use plain text for TTS (response.text is already stripped of HTML)
         playTextAsAudio(response.text);
-        
+
+        // Use HTML version for UI if available, otherwise fall back to plain text
+        const textToStore = response.hasHtml && response.textForUi ? response.textForUi : response.text;
+
         // Create turn in parallel (UI update can happen while audio starts)
         createTurn({
           conversationId: currentConversationId,
           role: 'assistant',
-          text: response.text,
+          text: textToStore,
         });
       }
     },

@@ -158,8 +158,8 @@ export class AgentforceClient {
 
     console.log('Sending message payload:', JSON.stringify(payload, null, 2));
     const response: AgentforceMessageResponse = await this.makeApiCall(
-      `/sessions/${sessionId}/messages`, 
-      'POST', 
+      `/sessions/${sessionId}/messages`,
+      'POST',
       payload
     );
 
@@ -168,12 +168,36 @@ export class AgentforceClient {
     if (response.messages && response.messages.length > 0) {
       const lastMessage = response.messages[response.messages.length - 1];
       if (lastMessage && lastMessage.message) {
-        return lastMessage.message;
+        // Check if the message is already a JSON object string
+        // If it contains both message and data fields, serialize the whole object
+        if (typeof lastMessage.message === 'string') {
+          try {
+            const parsed = JSON.parse(lastMessage.message);
+            // If it parsed successfully and has the expected structure, return as-is
+            return lastMessage.message;
+          } catch (e) {
+            // Not JSON, return as plain text
+            return lastMessage.message;
+          }
+        }
+        // If message is an object, serialize it
+        return typeof lastMessage.message === 'object'
+          ? JSON.stringify(lastMessage.message)
+          : lastMessage.message;
       }
     }
-    
+
+    // Fallback: check if response.message exists
+    if (response.message) {
+      // Same logic as above
+      if (typeof response.message === 'string') {
+        return response.message;
+      }
+      return JSON.stringify(response.message);
+    }
+
     // Ensure we always return a string, never undefined
-    return response.message || 'Response received from agent';
+    return 'Response received from agent';
   }
 
   async endSession(sessionId: string): Promise<boolean> {

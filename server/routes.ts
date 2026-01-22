@@ -289,11 +289,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper function to strip HTML tags for TTS
+  function stripHtmlTags(html: string): string {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')           // Convert <br> to newlines
+      .replace(/<\/p>/gi, '\n\n')              // Convert closing </p> to double newlines
+      .replace(/<li[^>]*>/gi, '\n• ')          // Convert <li> to bullet points
+      .replace(/<\/li>/gi, '')                 // Remove closing </li>
+      .replace(/<[^>]+>/g, '')                 // Remove all other HTML tags
+      .replace(/&nbsp;/g, ' ')                 // Convert &nbsp; to space
+      .replace(/&amp;/g, '&')                  // Convert &amp; to &
+      .replace(/&lt;/g, '<')                   // Convert &lt; to <
+      .replace(/&gt;/g, '>')                   // Convert &gt; to >
+      .replace(/&quot;/g, '"')                 // Convert &quot; to "
+      .replace(/&#39;/g, "'")                  // Convert &#39; to '
+      .replace(/\n\s*\n\s*\n/g, '\n\n')        // Collapse multiple newlines
+      .trim();
+  }
+
+  // Helper function to process Agentforce response
+  function processAgentforceResponse(rawResponse: string): { textForTts: string; textForUi: string; hasHtml: boolean } {
+    try {
+      // Try to parse as JSON to check for structured response
+      const parsed = JSON.parse(rawResponse);
+
+      // Check if response has the special data format with HTML
+      if (parsed.data && Array.isArray(parsed.data) && parsed.data.length > 0) {
+        const firstDataItem = parsed.data[0];
+        if (firstDataItem.value && firstDataItem.value.promptResponse) {
+          const htmlContent = firstDataItem.value.promptResponse;
+          const plainMessage = parsed.message || '';
+
+          // Combine plain message with HTML content for UI
+          const combinedHtml = plainMessage
+            ? `<p>${plainMessage}</p>\n${htmlContent}`
+            : htmlContent;
+
+          // Extract plain text for TTS
+          const textForTts = plainMessage + '\n' + stripHtmlTags(htmlContent);
+
+          console.log('📊 Detected structured response with HTML');
+          console.log('TTS text preview:', textForTts.substring(0, 100) + '...');
+
+          return {
+            textForTts: textForTts.trim(),
+            textForUi: combinedHtml,
+            hasHtml: true
+          };
+        }
+      }
+
+      // If parsed but no special format, treat as plain text
+      return {
+        textForTts: rawResponse,
+        textForUi: rawResponse,
+        hasHtml: false
+      };
+    } catch (e) {
+      // Not JSON, treat as plain text
+      return {
+        textForTts: rawResponse,
+        textForUi: rawResponse,
+        hasHtml: false
+      };
+    }
+  }
+
   // Agentforce integration
   app.post('/api/agentforce', async (req, res) => {
     try {
       const { text, conversationId } = req.body;
-      
+
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
@@ -310,14 +376,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Call Agentforce API with session persistence
       const { response, sessionId } = await agentforceClient.chatWithAgentInConversation(
-        text, 
+        text,
         conversation.sessionId || undefined
       );
 
       // Validate response is not undefined or empty
       if (!response || typeof response !== 'string' || response.trim() === '') {
         console.error('❌ Agent returned invalid response:', response);
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'Agent response invalid',
           details: 'The agent did not provide a valid text response'
         });
@@ -325,21 +391,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('✅ Agent response validated:', response.substring(0, 100) + '...');
 
+      // Process response to separate TTS and UI versions
+      const processed = processAgentforceResponse(response);
+
       // Update conversation with sessionId if it's new or changed
       if (sessionId !== conversation.sessionId) {
         await storage.updateConversationSessionId(conversationId, sessionId);
       }
 
-      res.json({ 
-        text: response,
+      res.json({
+        text: processed.textForTts,        // Plain text for TTS
+        textForUi: processed.textForUi,    // HTML or plain text for UI
+        hasHtml: processed.hasHtml,        // Flag to indicate HTML content
         conversationId,
         sessionId // Include sessionId in response for debugging
       });
     } catch (error: any) {
       console.error('Error calling Agentforce:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to get Agentforce response',
-        details: error.message 
+        details: error.message
       });
     }
   });

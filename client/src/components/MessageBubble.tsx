@@ -1,7 +1,7 @@
 import { Bot, User, CheckCheck, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 const agentforceLogo = '/agentforce-logo.png';
 
@@ -17,9 +17,9 @@ interface MessageBubbleProps {
   showTimestamp?: boolean;
 }
 
-export default function MessageBubble({ 
-  message, 
-  isUser, 
+export default function MessageBubble({
+  message,
+  isUser,
   timestamp,
   isTyping = false,
   isFirstInGroup = true,
@@ -29,12 +29,17 @@ export default function MessageBubble({
   showTimestamp = true
 }: MessageBubbleProps) {
   const [hasAnimated, setHasAnimated] = useState(false);
-  
-  const formattedTimestamp = timestamp 
-    ? typeof timestamp === 'string' 
-      ? timestamp 
+
+  const formattedTimestamp = timestamp
+    ? typeof timestamp === 'string'
+      ? timestamp
       : formatRelativeTime(timestamp)
     : undefined;
+
+  // Detect if message contains HTML tags
+  const hasHtml = useMemo(() => {
+    return /<[a-z][\s\S]*>/i.test(message);
+  }, [message]);
 
   // Trigger animation on mount for new messages
   useEffect(() => {
@@ -128,10 +133,18 @@ export default function MessageBubble({
             </div>
           ) : (
             <div className="flex flex-col gap-xs">
-              <p className="text-base leading-relaxed whitespace-pre-wrap" aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}>
-                {message}
-              </p>
-              
+              {hasHtml ? (
+                <div
+                  className="text-base leading-relaxed message-html-content"
+                  aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}
+                  dangerouslySetInnerHTML={{ __html: message }}
+                />
+              ) : (
+                <p className="text-base leading-relaxed whitespace-pre-wrap" aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}>
+                  {message}
+                </p>
+              )}
+
               {/* Message State Indicator for User Messages */}
               {isUser && messageState && (
                 <div className={`flex items-center justify-end gap-xs text-xs ${

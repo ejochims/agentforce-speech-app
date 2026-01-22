@@ -590,10 +590,109 @@
       transform: none;
       opacity: 1;
     }
-    
+
     /* Keep some visual indication but no motion */
     .animate-recording-breathe {
       opacity: 0.9;
     }
+  }
+
+  /* Message HTML Content Styles */
+  .message-html-content {
+    /* Typography */
+    line-height: 1.6;
+  }
+
+  .message-html-content p {
+    @apply mb-sm;
+  }
+
+  .message-html-content p:last-child {
+    @apply mb-0;
+  }
+
+  .message-html-content ul,
+  .message-html-content ol {
+    @apply mb-md ml-lg space-y-xs;
+  }
+
+  .message-html-content ul {
+    @apply list-disc;
+  }
+
+  .message-html-content ol {
+    @apply list-decimal;
+  }
+
+  .message-html-content li {
+    @apply ml-sm;
+  }
+
+  .message-html-content b,
+  .message-html-content strong {
+    @apply font-semibold;
+  }
+
+  .message-html-content i,
+  .message-html-content em {
+    @apply italic;
+  }
+
+  .message-html-content a {
+    @apply text-primary underline hover:text-primary/80;
+  }
+
+  .message-html-content code {
+    @apply bg-muted px-1 py-0.5 rounded text-sm font-mono;
+  }
+
+  .message-html-content pre {
+    @apply bg-muted p-md rounded-md overflow-x-auto mb-md;
+  }
+
+  .message-html-content pre code {
+    @apply bg-transparent p-0;
+  }
+
+  .message-html-content h1,
+  .message-html-content h2,
+  .message-html-content h3,
+  .message-html-content h4,
+  .message-html-content h5,
+  .message-html-content h6 {
+    @apply font-semibold mt-md mb-sm;
+  }
+
+  .message-html-content h1 {
+    @apply text-xl;
+  }
+
+  .message-html-content h2 {
+    @apply text-lg;
+  }
+
+  .message-html-content h3 {
+    @apply text-base;
+  }
+
+  .message-html-content blockquote {
+    @apply border-l-4 border-muted pl-md italic my-md;
+  }
+
+  .message-html-content hr {
+    @apply border-border my-md;
+  }
+
+  .message-html-content table {
+    @apply w-full border-collapse mb-md;
+  }
+
+  .message-html-content th,
+  .message-html-content td {
+    @apply border border-border px-sm py-xs;
+  }
+
+  .message-html-content th {
+    @apply bg-muted font-semibold;
   }
 }
