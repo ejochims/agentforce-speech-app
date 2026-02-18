@@ -1428,16 +1428,6 @@ export default function VoiceChat() {
         )}
       </main>
 
-      {/* Agent Transparency Panel - Side Panel */}
-      <AgentTransparencyPanel
-        events={pipelineEvents}
-        isVisible={showTransparency}
-        onToggle={() => {
-          setShowTransparency(false);
-          localStorage.setItem('showTransparency', 'false');
-        }}
-      />
-
       </div>
 
       {/* Voice Composer */}
@@ -1527,6 +1517,16 @@ export default function VoiceChat() {
           </div>
         </div>
       </footer>
+
+      {/* Agent Transparency Panel — rendered outside flex wrapper to avoid overflow clipping */}
+      <AgentTransparencyPanel
+        events={pipelineEvents}
+        isVisible={showTransparency}
+        onToggle={() => {
+          setShowTransparency(false);
+          localStorage.setItem('showTransparency', 'false');
+        }}
+      />
     </div>
   );
 }
