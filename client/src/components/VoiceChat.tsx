@@ -60,6 +60,10 @@ export default function VoiceChat() {
   const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
   const currentPipelineRef = useRef<{ id: string; startTime: number; userMessage: string } | null>(null);
 
+  // Streaming agent response state
+  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [isAgentStreaming, setIsAgentStreaming] = useState(false);
+
   // Audio permission and playback state
   const [audioEnabled, setAudioEnabled] = useState<boolean>(() => {
     return localStorage.getItem('audioEnabled') === 'true';
@@ -274,10 +278,7 @@ export default function VoiceChat() {
       if (variables.retryAgentRequest) {
         console.log('🔄 Retrying agent request with new conversation');
         setTimeout(() => {
-          getAgentResponse({
-            text: variables.retryAgentRequest!.text,
-            conversationId: conversation.id,
-          });
+          streamAgentResponse(variables.retryAgentRequest!.text, conversation.id);
         }, 100); // Small delay to ensure state is updated
       }
     },
@@ -335,10 +336,7 @@ export default function VoiceChat() {
       
       // If this was a user turn that should trigger agent response, do it now
       if (variables.triggerAgent && variables.role === 'user') {
-        getAgentResponse({
-          text: variables.text,
-          conversationId: variables.conversationId,
-        });
+        streamAgentResponse(variables.text, variables.conversationId);
       }
     },
     onError: (error, variables) => {
@@ -436,6 +434,122 @@ export default function VoiceChat() {
       }
     },
   });
+
+  // Stream agent response via SSE, with fallback to the blocking mutation
+  const streamAgentResponse = async (userText: string, convId: string) => {
+    setIsAgentStreaming(true);
+    setStreamingText(null);
+
+    try {
+      const response = await fetch('/api/agentforce/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: userText, conversationId: convId }),
+      });
+
+      // If the server returned an error before sending SSE headers, fall back to the blocking endpoint
+      if (!response.ok || !response.body) {
+        console.warn('⚠️ Stream endpoint unavailable, falling back to blocking request');
+        setIsAgentStreaming(false);
+        getAgentResponse({ text: userText, conversationId: convId });
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulatedText = '';
+      let ttsStarted = false;
+      let doneReceived = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE blocks are separated by double newline
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+
+        for (const block of blocks) {
+          const eventMatch = block.match(/^event: (\w+)/m);
+          const dataMatch = block.match(/^data: (.+)/ms);
+          if (!eventMatch || !dataMatch) continue;
+
+          const eventType = eventMatch[1];
+          let data: any;
+          try {
+            data = JSON.parse(dataMatch[1]);
+          } catch {
+            continue;
+          }
+
+          if (eventType === 'chunk') {
+            accumulatedText += data.text;
+            setStreamingText(accumulatedText);
+
+            // Start TTS on the first complete sentence to overlap generation and playback
+            if (!ttsStarted && audioEnabled && /[.!?]\s/.test(accumulatedText)) {
+              const firstSentenceMatch = accumulatedText.match(/^.*?[.!?](?:\s|$)/);
+              if (firstSentenceMatch) {
+                ttsStarted = true;
+                console.log('🎵 Early TTS: starting on first sentence');
+                playTextAsAudio(firstSentenceMatch[0].trim());
+              }
+            }
+          } else if (eventType === 'done') {
+            doneReceived = true;
+            // Clear streaming bubble — real turn will appear via query invalidation
+            setStreamingText(null);
+            setIsAgentStreaming(false);
+
+            // Update transparency panel
+            if (data.transparency && currentPipelineRef.current) {
+              const pipeline = currentPipelineRef.current;
+              const totalClientMs = Date.now() - pipeline.startTime;
+              setPipelineEvents(prev => prev.map(e =>
+                e.id === pipeline.id
+                  ? { ...e, agent: data.transparency, totalClientMs, ttsRequested: audioEnabled }
+                  : e
+              ));
+              currentPipelineRef.current = null;
+            }
+
+            // Play full TTS only if we haven't started early playback
+            if (!ttsStarted && audioEnabled) {
+              playTextAsAudio(data.text);
+            }
+
+            // Save the assistant turn
+            createTurn({
+              conversationId: convId,
+              role: 'assistant',
+              text: data.text,
+            });
+          } else if (eventType === 'error') {
+            console.error('❌ Streaming agent error:', data.error);
+            setStreamingText(null);
+            setIsAgentStreaming(false);
+            // Fall back to blocking request on stream error
+            getAgentResponse({ text: userText, conversationId: convId });
+          }
+        }
+      }
+
+      // Safety: if stream ended without a 'done' event and we still have text, save it
+      if (accumulatedText && !doneReceived) {
+        setStreamingText(null);
+        setIsAgentStreaming(false);
+        createTurn({ conversationId: convId, role: 'assistant', text: accumulatedText });
+        if (!ttsStarted && audioEnabled) playTextAsAudio(accumulatedText);
+      }
+    } catch (error) {
+      console.error('❌ Stream fetch error, falling back to blocking request:', error);
+      setStreamingText(null);
+      setIsAgentStreaming(false);
+      getAgentResponse({ text: userText, conversationId: convId });
+    }
+  };
 
   // Removed auto-scroll to prevent interference with user interactions
   // Users can manually scroll to see new messages
@@ -1138,7 +1252,7 @@ export default function VoiceChat() {
               <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={true} />
             </div>
           ) : turns.length > 0 && (
-            <div className="pb-lg" aria-busy={agentPending} aria-live="polite">
+            <div className="pb-lg" aria-busy={agentPending || isAgentStreaming} aria-live="polite">
               {/* Render saved messages */}
               {turns.map((turn, index) => {
                 const previousTurn = index > 0 ? turns[index - 1] : null;
@@ -1195,8 +1309,21 @@ export default function VoiceChat() {
                 );
               })}
               
-              {/* Agent typing indicator with loading state */}
-              {agentPending && (
+              {/* Agent streaming text or typing indicator */}
+              {isAgentStreaming && streamingText ? (
+                <div aria-busy="true" aria-live="polite" role="status" aria-label="Agent is responding">
+                  <MessageBubble
+                    message={streamingText + '▌'}
+                    isUser={false}
+                    isTyping={false}
+                    isFirstInGroup={true}
+                    isLastInGroup={true}
+                    showAvatar={true}
+                    showTimestamp={false}
+                    messageState="sent"
+                  />
+                </div>
+              ) : (agentPending || isAgentStreaming) && (
                 <div aria-busy="true" aria-live="polite" role="status" aria-label="Agent is responding">
                   <MessageBubble
                     message=""
@@ -1222,7 +1349,7 @@ export default function VoiceChat() {
               <div className={`relative transition-transform duration-300 ${
                 recordingState === 'recording' ? 'scale-110' : 
                 recordingState === 'processing' ? 'scale-105 animate-pulse' :
-                agentPending ? 'scale-105 animate-pulse' :
+                (agentPending || isAgentStreaming) ? 'scale-105 animate-pulse' :
                 isAudioPlaying ? 'scale-105' :
                 'scale-100'
               }`}>
@@ -1235,8 +1362,8 @@ export default function VoiceChat() {
                   </>
                 )}
                 
-                {/* Ripple Rings for Agent Thinking */}
-                {agentPending && (
+                {/* Ripple Rings for Agent Thinking / Streaming */}
+                {(agentPending || isAgentStreaming) && (
                   <>
                     <div className="absolute inset-0 rounded-full border-2 border-yellow-500/25 animate-ping" />
                     <div className="absolute inset-0 rounded-full border-2 border-yellow-400/15 animate-ping" style={{ animationDelay: '0.3s' }} />
@@ -1270,7 +1397,7 @@ export default function VoiceChat() {
                 <p className="text-sm text-muted-foreground max-w-sm">
                   {recordingState === 'recording' ? 'Listening...' :
                    recordingState === 'processing' ? 'Processing your message...' :
-                   agentPending ? 'Thinking...' :
+                   (agentPending || isAgentStreaming) ? (streamingText ? 'Agent is responding...' : 'Thinking...') :
                    isAudioPlaying ? 'Agent is speaking...' :
                    'Ready to chat! Press and hold to speak.'}
                 </p>

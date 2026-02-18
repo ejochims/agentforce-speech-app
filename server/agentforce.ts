@@ -207,6 +207,78 @@ export class AgentforceClient {
     return { text, rawResponse: response };
   }
 
+  async *sendMessageStream(sessionId: string, message: string): AsyncGenerator<
+    { type: 'chunk'; text: string } | { type: 'done'; rawResponse: Record<string, any> }
+  > {
+    const accessToken = await this.getAccessToken();
+    const url = `https://api.salesforce.com/einstein/ai-agent/v1/sessions/${sessionId}/messages`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      },
+      body: JSON.stringify({
+        message: { sequenceId: 1, type: 'Text', text: message },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API call failed: ${response.status} ${errorText}`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('text/event-stream') && response.body) {
+      // True streaming path
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (!raw || raw === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(raw);
+            // Handle various possible chunk formats from Agentforce
+            const chunk = parsed.text || parsed.message?.text || parsed.data?.text || '';
+            if (chunk) {
+              fullText += chunk;
+              yield { type: 'chunk', text: chunk };
+            }
+          } catch {
+            // Skip malformed JSON lines
+          }
+        }
+      }
+      yield { type: 'done', rawResponse: { message: fullText } };
+    } else {
+      // Non-streaming fallback: read full JSON, yield as single chunk then done
+      const data = await response.json();
+      let text = '';
+      if (data.messages && data.messages.length > 0) {
+        text = data.messages[data.messages.length - 1]?.message || '';
+      } else {
+        text = data.message || '';
+      }
+      if (text) yield { type: 'chunk', text };
+      yield { type: 'done', rawResponse: data };
+    }
+  }
+
   async endSession(sessionId: string): Promise<boolean> {
     try {
       await this.makeApiCall(`/sessions/${sessionId}`, 'DELETE');
