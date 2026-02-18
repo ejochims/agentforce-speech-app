@@ -41,6 +41,9 @@ Thumbs.db
 *.swo
 *~
 
+# Test artifacts
+test-results/
+
 # Misc
 *.tar.gz
 vite.config.ts.*
