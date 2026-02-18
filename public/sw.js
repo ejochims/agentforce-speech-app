@@ -1,6 +1,6 @@
 // Agentforce Voice Assistant Service Worker
 // IMPORTANT: bump this version string on every deploy so stale caches are cleared
-const CACHE_NAME = 'agentforce-voice-v3';
+const CACHE_NAME = 'agentforce-voice-v4';
 
 // Only pre-cache static, non-HTML assets.
 // The HTML page (/) must NEVER be cached here because it contains
@@ -29,23 +29,43 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and reload any pages that were stuck
+// with stale HTML from the old service worker.
 self.addEventListener('activate', event => {
   console.log('[SW] Activating service worker...');
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then(cacheNames => {
+        // Identify old caches so we know whether this is an upgrade
+        const oldCaches = cacheNames.filter(name => name !== CACHE_NAME);
+        const isUpgrade = oldCaches.length > 0;
+
+        return Promise.all(oldCaches.map(name => {
+          console.log('[SW] Deleting old cache:', name);
+          return caches.delete(name);
+        }))
+          // Take control of all open clients immediately
+          .then(() => self.clients.claim())
+          .then(() => {
+            if (!isUpgrade) return; // Fresh install — no stale pages to fix
+
+            // This is an upgrade from an old SW version. Any open pages may
+            // be showing a blank screen because the old SW served cached HTML
+            // with stale Vite asset hashes that 404 on the new server.
+            // Force-navigate each window client to its current URL so the
+            // new (network-first) SW serves fresh HTML and React can mount.
+            return self.clients.matchAll({ type: 'window' })
+              .then(clients => Promise.all(
+                clients.map(client => {
+                  console.log('[SW] Reloading client to clear stale content:', client.url);
+                  return client.navigate(client.url).catch(() => {
+                    // navigate() may not be available in older browsers; harmless.
+                  });
+                })
+              ));
+          });
+      })
   );
-  // Take control of all clients immediately
-  self.clients.claim();
 });
 
 // Fetch event
