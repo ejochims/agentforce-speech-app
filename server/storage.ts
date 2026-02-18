@@ -25,6 +25,7 @@ export interface IStorage {
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversationStatus(id: string, status: string): Promise<void>;
   updateConversationSessionId(id: string, sessionId: string): Promise<void>;
+  updateConversationTitle(id: string, title: string): Promise<void>;
   
   // Turns
   getTurnsByConversation(conversationId: string): Promise<Turn[]>;
@@ -100,6 +101,13 @@ export class MemStorage implements IStorage {
     const conversation = this.conversations.get(id);
     if (conversation) {
       this.conversations.set(id, { ...conversation, sessionId });
+    }
+  }
+
+  async updateConversationTitle(id: string, title: string): Promise<void> {
+    const conversation = this.conversations.get(id);
+    if (conversation) {
+      this.conversations.set(id, { ...conversation, title });
     }
   }
 

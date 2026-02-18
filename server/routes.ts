@@ -84,6 +84,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/conversations/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title } = req.body;
+      if (!title || typeof title !== 'string' || !title.trim()) {
+        return res.status(400).json({ error: 'title is required' });
+      }
+      const conversation = await storage.getConversation(id);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      await storage.updateConversationTitle(id, title.trim());
+      res.json({ ...conversation, title: title.trim() });
+    } catch (error) {
+      console.error('Error updating conversation title:', error);
+      res.status(500).json({ error: 'Failed to update conversation' });
+    }
+  });
+
   app.get('/api/conversations/:id/turns', async (req, res) => {
     try {
       const { id } = req.params;

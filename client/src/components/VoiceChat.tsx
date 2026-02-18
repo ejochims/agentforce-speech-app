@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil } from 'lucide-react';
 import { 
   Drawer,
   DrawerContent,
@@ -49,7 +49,9 @@ export default function VoiceChat() {
   const [showConversation, setShowConversation] = useState<boolean>(() => {
     return localStorage.getItem('showConversation') === 'true'; // Default to false
   });
-  const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error' }>>(new Map());
+  const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error'; conversationId: string; triggerAgent: boolean }>>(new Map());
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingError, setRecordingError] = useState<string | null>(null);
   
@@ -328,10 +330,12 @@ export default function VoiceChat() {
     mutationFn: (turnData: { conversationId: string; role: string; text: string; triggerAgent?: boolean; pendingId?: string }) => {
       // Add pending message for user messages
       if (turnData.role === 'user' && turnData.pendingId) {
-        setPendingMessages(prev => new Map(prev.set(turnData.pendingId!, { 
-          text: turnData.text, 
-          timestamp: new Date(), 
-          state: 'sending' 
+        setPendingMessages(prev => new Map(prev.set(turnData.pendingId!, {
+          text: turnData.text,
+          timestamp: new Date(),
+          state: 'sending',
+          conversationId: turnData.conversationId,
+          triggerAgent: turnData.triggerAgent ?? true,
         })));
       }
       
@@ -360,10 +364,12 @@ export default function VoiceChat() {
     onError: (error, variables) => {
       // Update pending message to error state
       if (variables.pendingId) {
-        setPendingMessages(prev => new Map(prev.set(variables.pendingId!, { 
-          text: variables.text, 
-          timestamp: new Date(), 
-          state: 'error' 
+        setPendingMessages(prev => new Map(prev.set(variables.pendingId!, {
+          text: variables.text,
+          timestamp: new Date(),
+          state: 'error',
+          conversationId: variables.conversationId,
+          triggerAgent: variables.triggerAgent ?? true,
         })));
       }
       const errorDetails = {
@@ -376,6 +382,38 @@ export default function VoiceChat() {
       console.error('Error creating turn:', errorDetails);
     },
   });
+
+  // Rename a conversation title
+  const { mutate: updateConversationTitle } = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiRequest(`/api/conversations/${id}`, { method: 'PATCH', body: { title } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+    },
+  });
+
+  const saveTitle = (id: string) => {
+    const trimmed = editingTitleValue.trim();
+    const original = conversations.find((c: any) => c.id === id)?.title;
+    if (trimmed && trimmed !== original) {
+      updateConversationTitle({ id, title: trimmed });
+    }
+    setEditingTitleId(null);
+  };
+
+  // Retry a failed pending message
+  const retryMessage = useCallback((pendingId: string) => {
+    const pending = pendingMessages.get(pendingId);
+    if (!pending || pending.state !== 'error') return;
+    setPendingMessages(prev => new Map(prev.set(pendingId, { ...pending, state: 'sending' })));
+    createTurn({
+      conversationId: pending.conversationId,
+      role: 'user',
+      text: pending.text,
+      triggerAgent: pending.triggerAgent,
+      pendingId,
+    });
+  }, [pendingMessages, createTurn]);
 
   // Agentforce mutation with error handling
   const { mutate: getAgentResponse, isPending: agentPending } = useMutation({
@@ -1003,12 +1041,13 @@ export default function VoiceChat() {
                         const lastActivity = new Date(conversation.createdAt);
                         
                         return (
-                          <Card 
-                            key={conversation.id} 
-                            className={`hover-elevate cursor-pointer transition-all duration-200 ${
+                          <Card
+                            key={conversation.id}
+                            className={`group hover-elevate cursor-pointer transition-all duration-200 ${
                               isCurrentConversation ? 'ring-2 ring-primary/20 border-primary/30' : ''
                             }`}
                             onClick={() => {
+                              if (editingTitleId === conversation.id) return;
                               if (!isCurrentConversation) {
                                 setCurrentConversationId(conversation.id);
                                 localStorage.setItem('currentConversationId', conversation.id);
@@ -1025,11 +1064,42 @@ export default function VoiceChat() {
                               <div className="flex items-start justify-between gap-md">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-sm mb-sm">
-                                    <h4 className="font-medium text-foreground truncate">
-                                      {conversation.title}
-                                    </h4>
+                                    {editingTitleId === conversation.id ? (
+                                      <input
+                                        value={editingTitleValue}
+                                        onChange={(e) => setEditingTitleValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') saveTitle(conversation.id);
+                                          if (e.key === 'Escape') setEditingTitleId(null);
+                                          e.stopPropagation();
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onBlur={() => saveTitle(conversation.id)}
+                                        autoFocus
+                                        className="flex-1 min-w-0 text-sm font-medium bg-transparent border-b border-primary outline-none py-0.5 text-foreground w-full"
+                                        aria-label="Edit conversation title"
+                                      />
+                                    ) : (
+                                      <>
+                                        <h4 className="font-medium text-foreground truncate flex-1 min-w-0">
+                                          {conversation.title}
+                                        </h4>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingTitleId(conversation.id);
+                                            setEditingTitleValue(conversation.title);
+                                          }}
+                                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-muted flex-shrink-0 transition-opacity"
+                                          aria-label="Edit conversation title"
+                                          title="Rename"
+                                        >
+                                          <Pencil className="w-3 h-3 text-muted-foreground" />
+                                        </button>
+                                      </>
+                                    )}
                                     {isCurrentConversation && (
-                                      <Badge variant="secondary" className="text-xs px-sm py-0.5">
+                                      <Badge variant="secondary" className="text-xs px-sm py-0.5 flex-shrink-0">
                                         Current
                                       </Badge>
                                     )}
@@ -1358,6 +1428,7 @@ export default function VoiceChat() {
                     showAvatar={true}
                     showTimestamp={true}
                     messageState={pendingMessage.state}
+                    onRetry={pendingMessage.state === 'error' ? () => retryMessage(pendingId) : undefined}
                   />
                 );
               })}

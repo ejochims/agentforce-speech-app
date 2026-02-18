@@ -1,4 +1,4 @@
-import { Bot, User, CheckCheck, Clock, Copy, Check } from 'lucide-react';
+import { Bot, User, CheckCheck, Clock, Copy, Check, RotateCcw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
 import { useState, useEffect } from 'react';
@@ -16,6 +16,7 @@ interface MessageBubbleProps {
   showAvatar?: boolean;
   showTimestamp?: boolean;
   isPlaying?: boolean;
+  onRetry?: () => void;
 }
 
 export default function MessageBubble({
@@ -29,6 +30,7 @@ export default function MessageBubble({
   showAvatar = true,
   showTimestamp = true,
   isPlaying = false,
+  onRetry,
 }: MessageBubbleProps) {
   const [hasAnimated, setHasAnimated] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -199,7 +201,19 @@ export default function MessageBubble({
                     </>
                   )}
                   {messageState === 'error' && (
-                    <span role="alert">Failed to send</span>
+                    <>
+                      <span role="alert">Failed to send</span>
+                      {onRetry && (
+                        <button
+                          onClick={onRetry}
+                          className="flex items-center gap-[3px] text-xs text-destructive underline hover:no-underline ml-xs"
+                          aria-label="Retry sending message"
+                        >
+                          <RotateCcw className="w-2.5 h-2.5" />
+                          Retry
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}
