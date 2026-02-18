@@ -24,8 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import VoiceRecordButton, { type VoiceRecordButtonHandle } from './VoiceRecordButton';
-import AudioVisualizer from './AudioVisualizer';
+import VoiceRecordButton from './VoiceRecordButton';
 import MessageBubble from './MessageBubble';
 import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
@@ -92,33 +91,9 @@ export default function VoiceChat() {
   const isNearBottomRef = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Hold-to-record / push-to-talk
-  const voiceButtonRef = useRef<VoiceRecordButtonHandle>(null);
-  const spaceHeldRef = useRef(false);
-  const [holdToRecord, setHoldToRecord] = useState<boolean>(() =>
-    localStorage.getItem('holdToRecord') === 'true'
-  );
-
-  // Global keyboard navigation + Space bar push-to-talk
+  // Global keyboard navigation (Escape only)
   useEffect(() => {
-    const isInTextInput = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable;
-    };
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Space bar push-to-talk (only when not typing in an input)
-      if (e.key === ' ' && !e.repeat && !isInTextInput(e)) {
-        e.preventDefault();
-        if (!spaceHeldRef.current && !isValidatingConversation) {
-          spaceHeldRef.current = true;
-          // startRecording calls onBeforeRecording (unlockAudioForSafari) internally
-          voiceButtonRef.current?.startRecording();
-        }
-        return;
-      }
-
-      // Esc key to close history drawer or cancel recording
       if (e.key === 'Escape') {
         if (isHistoryOpen) {
           e.preventDefault();
@@ -131,22 +106,12 @@ export default function VoiceChat() {
       }
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ' && spaceHeldRef.current && !isInTextInput(e)) {
-        e.preventDefault();
-        spaceHeldRef.current = false;
-        voiceButtonRef.current?.stopRecording(false);
-      }
-    };
-
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('keyup', handleKeyUp);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHistoryOpen, isRecording, isValidatingConversation]);
+  }, [isHistoryOpen, isRecording]);
 
   // Scroll handler: track whether user is near the bottom
   const handleScroll = useCallback(() => {
@@ -1243,24 +1208,6 @@ export default function VoiceChat() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label htmlFor="hold-to-record" className="flex flex-col space-y-1">
-                      <span className="text-sm font-medium">Hold to Speak</span>
-                      <span className="text-xs text-muted-foreground">
-                        Press &amp; hold the mic to record; release to send.
-                        On desktop, Space bar works the same way.
-                      </span>
-                    </Label>
-                    <Switch
-                      id="hold-to-record"
-                      checked={holdToRecord}
-                      onCheckedChange={(checked) => {
-                        setHoldToRecord(checked);
-                        localStorage.setItem('holdToRecord', String(checked));
-                      }}
-                      data-testid="toggle-hold-to-record"
-                    />
-                  </div>
                 </div>
               </SheetContent>
             </Sheet>
@@ -1384,9 +1331,7 @@ export default function VoiceChat() {
                   Talk to Agentforce
                 </h2>
                 <p className="text-base text-muted-foreground leading-relaxed max-w-sm" data-testid="text-instructions">
-                  {holdToRecord
-                    ? 'Press and hold the mic button to record. Release to send. On desktop, hold Space bar instead.'
-                    : 'Tap the mic button to start recording. On desktop, hold the Space bar to speak hands-free.'}
+                  Tap the mic button to start recording. Tap again to send.
                 </p>
               </div>
             </div>
@@ -1602,8 +1547,7 @@ export default function VoiceChat() {
                    recordingState === 'processing' ? 'Processing your message...' :
                    (agentPending || isAgentStreaming) ? (streamingText ? 'Agent is responding...' : 'Thinking...') :
                    isAudioPlaying ? 'Agent is speaking...' :
-                   holdToRecord ? 'Hold the mic button to speak' :
-                   'Tap the mic to start · Space bar on desktop'}
+                   'Tap the mic to start'}
                 </p>
               </div>
             </div>
@@ -1693,7 +1637,6 @@ export default function VoiceChat() {
 
               <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
                 <VoiceRecordButton
-                  ref={voiceButtonRef}
                   onBeforeRecording={unlockAudioForSafari}
                   onRecordingStart={handleRecordingStart}
                   onRecordingStop={handleRecordingStop}
@@ -1705,7 +1648,6 @@ export default function VoiceChat() {
                     setRecordingError(null);
                     setRecordingState('idle');
                   }}
-                  holdToRecord={holdToRecord}
                 />
                 {/* Processing indicator - Only show in conversation mode */}
                 {recordingState === 'processing' && showConversation && (

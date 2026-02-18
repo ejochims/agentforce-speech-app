@@ -20,7 +20,6 @@ interface VoiceRecordButtonProps {
   error?: string;
   onRetry?: () => void;
   maxDuration?: number; // seconds, default 120
-  holdToRecord?: boolean; // Hold-button / push-to-talk mode
 }
 
 const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonProps>(function VoiceRecordButton({
@@ -33,7 +32,6 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   error,
   onRetry,
   maxDuration = 120,
-  holdToRecord = false,
 }, ref) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -253,23 +251,6 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
     }
   };
 
-  // Hold-to-record pointer handlers
-  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!holdToRecord || disabled || state === 'processing') return;
-    e.preventDefault();
-    (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
-    if (!isRecording) startRecording();
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!holdToRecord || disabled) return;
-    if (isRecording) stopRecording(false);
-  };
-
-  const handlePointerCancel = () => {
-    if (holdToRecord && isRecording) stopRecording(true); // cancel on accidental lift
-  };
-
   // Keyboard navigation handler
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
@@ -325,7 +306,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       case 'error':
         return error || 'Recording failed • Tap to retry';
       default:
-        return holdToRecord ? 'Hold to speak' : 'Tap to record';
+        return 'Tap to record';
     }
   };
   
@@ -372,12 +353,8 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
           disabled={disabled}
           className={`${getButtonClassName()} ${
             state === 'recording' ? 'animate-recording-breathe' : ''
-          } ${holdToRecord ? 'select-none touch-none' : ''}`}
-          onClick={holdToRecord ? undefined : handleToggleRecording}
-          onPointerDown={holdToRecord ? handlePointerDown : undefined}
-          onPointerUp={holdToRecord ? handlePointerUp : undefined}
-          onPointerLeave={holdToRecord ? handlePointerCancel : undefined}
-          onPointerCancel={holdToRecord ? handlePointerCancel : undefined}
+          }`}
+          onClick={handleToggleRecording}
           onKeyDown={handleKeyDown}
           data-testid="button-voice-record"
           aria-label={getStatusText()}
