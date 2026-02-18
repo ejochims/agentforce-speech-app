@@ -14,6 +14,7 @@ interface VoiceRecordButtonProps {
   state?: RecordingState;
   error?: string;
   onRetry?: () => void;
+  maxDuration?: number; // seconds, default 120
 }
 
 export default function VoiceRecordButton({ 
@@ -24,7 +25,8 @@ export default function VoiceRecordButton({
   disabled = false,
   state = 'idle',
   error,
-  onRetry
+  onRetry,
+  maxDuration = 120,
 }: VoiceRecordButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -114,10 +116,19 @@ export default function VoiceRecordButton({
       setRecordingDuration(0);
       startTimeRef.current = Date.now();
       
-      // Start duration counter
+      // Start duration counter + auto-stop at maxDuration
       durationIntervalRef.current = setInterval(() => {
-        const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
-        setRecordingDuration(duration);
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setRecordingDuration(elapsed);
+
+        if (elapsed >= maxDuration && mediaRecorder.current?.state === 'recording') {
+          clearInterval(durationIntervalRef.current!);
+          durationIntervalRef.current = null;
+          mediaRecorder.current.stop();
+          setIsRecording(false);
+          setRecordingDuration(0);
+          triggerHapticFeedback([10, 50, 10]);
+        }
       }, 100);
       
       // Trigger haptic feedback on successful recording start
@@ -242,10 +253,15 @@ export default function VoiceRecordButton({
   
   const getStatusText = () => {
     if (disabled) return 'Recording disabled';
-    
+
     switch (state) {
-      case 'recording':
-        return `Recording... ${formatDuration(recordingDuration)}`;
+      case 'recording': {
+        const remaining = maxDuration - recordingDuration;
+        const timeStr = formatDuration(recordingDuration);
+        if (remaining <= 10) return `Recording... ${timeStr} · ${remaining}s left`;
+        if (remaining <= 30) return `Recording... ${timeStr} · ${remaining}s`;
+        return `Recording... ${timeStr}`;
+      }
       case 'processing':
         return 'Processing audio...';
       case 'error':
@@ -322,8 +338,12 @@ export default function VoiceRecordButton({
         <p 
           id="recording-instructions"
           className={`text-sm font-medium transition-colors duration-200 ${
-            state === 'error' 
-              ? 'text-destructive' 
+            state === 'error'
+              ? 'text-destructive'
+              : state === 'recording' && recordingDuration >= maxDuration - 10
+              ? 'text-destructive'
+              : state === 'recording' && recordingDuration >= maxDuration - 30
+              ? 'text-amber-500'
               : 'text-muted-foreground'
           }`}
         >
