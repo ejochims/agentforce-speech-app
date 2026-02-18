@@ -298,6 +298,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Agentforce streaming integration (SSE)
+  app.post('/api/agentforce/stream', async (req, res) => {
+    const pipelineStart = Date.now();
+
+    try {
+      const { text, conversationId } = req.body;
+
+      if (!text) return res.status(400).json({ error: 'Text is required' });
+      if (!conversationId) return res.status(400).json({ error: 'ConversationId is required' });
+
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+      // Set SSE headers — X-Accel-Buffering disables nginx/Heroku proxy buffering
+      res.set({
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      res.flushHeaders();
+
+      const sendEvent = (event: string, data: object) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+
+      let sessionId = conversation.sessionId || undefined;
+      const isNewSession = !sessionId;
+      let sessionCreationMs: number | undefined;
+
+      if (!sessionId) {
+        const sessionStart = Date.now();
+        sessionId = await agentforceClient.startSession();
+        sessionCreationMs = Date.now() - sessionStart;
+        console.log(`New streaming session started: ${sessionId} (${sessionCreationMs}ms)`);
+      } else {
+        console.log('Reusing existing session for streaming:', sessionId);
+      }
+
+      let fullText = '';
+      const agentStart = Date.now();
+
+      for await (const event of agentforceClient.sendMessageStream(sessionId!, text)) {
+        if (event.type === 'chunk') {
+          fullText += event.text;
+          sendEvent('chunk', { text: event.text });
+        } else if (event.type === 'done') {
+          const agentProcessingMs = Date.now() - agentStart;
+
+          if (sessionId !== conversation.sessionId) {
+            await storage.updateConversationSessionId(conversationId, sessionId!);
+          }
+
+          console.log(`✅ Streaming response complete (${agentProcessingMs}ms): ${fullText.substring(0, 80)}...`);
+
+          sendEvent('done', {
+            text: fullText,
+            conversationId,
+            sessionId,
+            transparency: {
+              pipeline: {
+                totalMs: Date.now() - pipelineStart,
+                agentProcessingMs,
+                sessionCreationMs,
+              },
+              session: {
+                sessionId,
+                isNewSession,
+              },
+              response: {
+                messageCount: 1,
+                messageTypes: ['Text'],
+                status: 'success',
+              },
+              rawApiResponse: event.rawResponse,
+              timestamp: new Date().toISOString(),
+            },
+          });
+          res.end();
+        }
+      }
+    } catch (error: any) {
+      console.error('Error in streaming Agentforce endpoint:', error);
+      // If headers not sent yet, send JSON error; otherwise send SSE error event
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to get Agentforce response', details: error.message });
+      } else {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
   // Agentforce integration
   app.post('/api/agentforce', async (req, res) => {
     const pipelineStart = Date.now();
