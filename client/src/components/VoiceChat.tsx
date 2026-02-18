@@ -1106,7 +1106,7 @@ export default function VoiceChat() {
       <div className="flex flex-1 overflow-hidden">
 
       {/* Main Content Area */}
-      <main className="app-content relative flex-1" role="main" aria-label="Chat conversation">
+      <main className={`app-content relative flex-1 transition-all duration-200 ${showTransparency ? 'pr-80' : ''}`} role="main" aria-label="Chat conversation">
         {showConversation ? (
           // Conversation Mode
           <div className="px-lg py-lg space-y-lg h-full">
@@ -1420,7 +1420,7 @@ export default function VoiceChat() {
       </div>
 
       {/* Voice Composer */}
-      <footer className="app-footer">
+      <footer className={`app-footer transition-all duration-200 ${showTransparency ? 'pr-80' : ''}`}>
         <div className="px-lg pt-lg pb-lg keyboard-aware">
           {/* Unified Composer Layout */}
           <div className="flex flex-col gap-lg">

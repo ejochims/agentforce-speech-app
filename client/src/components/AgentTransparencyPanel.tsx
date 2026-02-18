@@ -224,7 +224,7 @@ export default function AgentTransparencyPanel({ events, isVisible, onToggle }: 
   if (!isVisible) return null;
 
   return (
-    <div className="w-80 border-l border-border bg-background/95 backdrop-blur-sm flex flex-col h-full overflow-hidden">
+    <div className="fixed right-0 top-14 bottom-0 w-80 border-l border-border bg-background/95 backdrop-blur-sm flex flex-col overflow-hidden z-[var(--z-overlay)]">
       {/* Panel Header */}
       <div className="px-md py-md border-b border-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-sm">
