@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap } from 'lucide-react';
 import { 
   Drawer,
   DrawerContent,
@@ -30,6 +30,7 @@ import MessageBubble from './MessageBubble';
 import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
+import AgentTransparencyPanel, { type PipelineEvent, type TransparencyData } from './AgentTransparencyPanel';
 import type { Conversation, Turn } from '@shared/schema';
 
 const agentforceLogo = '/agentforce-logo.png';
@@ -52,6 +53,13 @@ export default function VoiceChat() {
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingError, setRecordingError] = useState<string | null>(null);
   
+  // Transparency panel state
+  const [showTransparency, setShowTransparency] = useState<boolean>(() => {
+    return localStorage.getItem('showTransparency') === 'true';
+  });
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
+  const currentPipelineRef = useRef<{ id: string; startTime: number; userMessage: string } | null>(null);
+
   // Audio permission and playback state
   const [audioEnabled, setAudioEnabled] = useState<boolean>(() => {
     return localStorage.getItem('audioEnabled') === 'true';
@@ -280,14 +288,18 @@ export default function VoiceChat() {
     // Clear current conversation
     setCurrentConversationId(null);
     localStorage.removeItem('currentConversationId');
-    
+
     // Clear any text input
     setTextMessage('');
     setShowTextInput(false);
-    
+
+    // Clear transparency pipeline events for the new conversation
+    setPipelineEvents([]);
+    currentPipelineRef.current = null;
+
     // Invalidate and refetch queries to clear cached data
     queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-    
+
     // Create a new conversation
     createConversation({ title: 'Voice Chat', status: 'active' });
   };
@@ -353,11 +365,40 @@ export default function VoiceChat() {
   const { mutate: getAgentResponse, isPending: agentPending } = useMutation({
     mutationFn: ({ text, conversationId }: { text: string; conversationId: string }) =>
       apiRequest('/api/agentforce', { method: 'POST', body: { text, conversationId } }),
-    onSuccess: (response: { text: string; conversationId: string }) => {
+    onSuccess: (response: { text: string; conversationId: string; transparency?: TransparencyData }) => {
       if (currentConversationId) {
+        // Capture transparency data from the agent response
+        if (response.transparency && currentPipelineRef.current) {
+          const pipeline = currentPipelineRef.current;
+          const totalClientMs = Date.now() - pipeline.startTime;
+
+          setPipelineEvents(prev => {
+            const existing = prev.find(e => e.id === pipeline.id);
+            if (existing) {
+              return prev.map(e => e.id === pipeline.id ? {
+                ...e,
+                agent: response.transparency!,
+                totalClientMs,
+                ttsRequested: audioEnabled,
+              } : e);
+            }
+            // If no existing event (edge case), create one
+            return [...prev, {
+              id: pipeline.id,
+              userMessage: pipeline.userMessage,
+              timestamp: new Date().toISOString(),
+              agent: response.transparency!,
+              totalClientMs,
+              ttsRequested: audioEnabled,
+            }];
+          });
+
+          currentPipelineRef.current = null;
+        }
+
         // Start TTS immediately for faster playback - don't wait for UI updates
         playTextAsAudio(response.text);
-        
+
         // Create turn in parallel (UI update can happen while audio starts)
         createTurn({
           conversationId: currentConversationId,
@@ -463,13 +504,23 @@ export default function VoiceChat() {
 
   const handleTextMessage = async () => {
     if (!textMessage.trim() || !currentConversationId) return;
-    
+
     console.log('Sending text message:', textMessage);
     setIsProcessing(true);
-    
+
     const pendingId = `pending-${Date.now()}-${Math.random()}`;
     const messageText = textMessage;
-    
+
+    // Start tracking a pipeline event for transparency (text input, no STT)
+    const pipelineId = `pipeline-${Date.now()}`;
+    currentPipelineRef.current = { id: pipelineId, startTime: Date.now(), userMessage: messageText };
+    setPipelineEvents(prev => [...prev, {
+      id: pipelineId,
+      userMessage: messageText,
+      timestamp: new Date().toISOString(),
+      ttsRequested: audioEnabled,
+    }]);
+
     try {
       // Create user turn and trigger agent response after it's saved
       createTurn({
@@ -552,12 +603,33 @@ export default function VoiceChat() {
         throw new Error(`STT failed: ${sttResponse.status} ${errorJson?.error || errorText}`);
       }
 
-      const { text } = await sttResponse.json();
+      const sttResult = await sttResponse.json();
+      const { text } = sttResult;
       console.log('Transcribed text:', text);
 
       if (text.trim()) {
+        // Start tracking a pipeline event for transparency
+        const pipelineId = `pipeline-${Date.now()}`;
+        currentPipelineRef.current = { id: pipelineId, startTime: Date.now(), userMessage: text };
+
+        // Capture STT transparency data from the response
+        const sttTransparency = sttResult.transparency;
+        if (sttTransparency) {
+          setPipelineEvents(prev => [...prev, {
+            id: pipelineId,
+            userMessage: text,
+            timestamp: new Date().toISOString(),
+            stt: {
+              processingMs: sttTransparency.sttProcessingMs,
+              audioSizeBytes: sttTransparency.audioSizeBytes,
+              mimeType: sttTransparency.mimeType,
+            },
+            ttsRequested: audioEnabled,
+          }]);
+        }
+
         const pendingId = `pending-${Date.now()}-${Math.random()}`;
-        
+
         // Create user turn and trigger agent response after it's saved
         createTurn({
           conversationId: currentConversationId,
@@ -566,7 +638,7 @@ export default function VoiceChat() {
           triggerAgent: true,
           pendingId,
         });
-        
+
         setRecordingState('idle');
       } else {
         setRecordingError('No speech detected. Please speak clearly and try again.');
@@ -855,6 +927,22 @@ export default function VoiceChat() {
             >
               {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
             </Button>
+
+            {/* Transparency Panel Toggle */}
+            <Button
+              size="icon"
+              variant={showTransparency ? 'default' : 'ghost'}
+              className="touch-target w-11 h-11 rounded-full"
+              onClick={() => {
+                const next = !showTransparency;
+                setShowTransparency(next);
+                localStorage.setItem('showTransparency', String(next));
+              }}
+              data-testid="button-transparency"
+              title={showTransparency ? 'Hide agent transparency' : 'Show agent transparency'}
+            >
+              <Zap className="w-5 h-5" />
+            </Button>
             
             <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
               <SheetTrigger asChild>
@@ -900,8 +988,11 @@ export default function VoiceChat() {
         </div>
       </header>
 
+      {/* Main Content + Transparency Panel Row */}
+      <div className="flex flex-1 overflow-hidden">
+
       {/* Main Content Area */}
-      <main className="app-content relative" role="main" aria-label="Chat conversation">
+      <main className="app-content relative flex-1" role="main" aria-label="Chat conversation">
         {showConversation ? (
           // Conversation Mode
           <div className="px-lg py-lg space-y-lg h-full">
@@ -1189,6 +1280,18 @@ export default function VoiceChat() {
         )}
       </main>
 
+      {/* Agent Transparency Panel - Side Panel */}
+      <AgentTransparencyPanel
+        events={pipelineEvents}
+        isVisible={showTransparency}
+        onToggle={() => {
+          setShowTransparency(false);
+          localStorage.setItem('showTransparency', 'false');
+        }}
+      />
+
+      </div>
+
       {/* Voice Composer */}
       <footer className="app-footer">
         <div className="px-lg pt-lg pb-lg keyboard-aware">
@@ -1231,7 +1334,7 @@ export default function VoiceChat() {
                 </div>
               </div>
             )}
-            
+
             {/* Voice Interface */}
             <div className="flex flex-col items-center gap-lg">
               <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
@@ -1258,7 +1361,7 @@ export default function VoiceChat() {
                   </div>
                 )}
               </div>
-              
+
               {/* Text Input Toggle */}
               <Button
                 variant="ghost"

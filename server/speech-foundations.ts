@@ -24,25 +24,38 @@ export class SpeechFoundationsClient {
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
 
-  constructor() {
-    let domainUrl = process.env.SALESFORCE_SPEECH_DOMAIN_URL!;
-    this.consumerKey = process.env.SALESFORCE_SPEECH_CONSUMER_KEY!;
-    this.consumerSecret = process.env.SALESFORCE_SPEECH_CONSUMER_SECRET!;
+  private configured = false;
 
-    if (!domainUrl || !this.consumerKey || !this.consumerSecret) {
-      throw new Error('Missing required Salesforce Speech Foundations environment variables');
+  constructor() {
+    let domainUrl = process.env.SALESFORCE_SPEECH_DOMAIN_URL || '';
+    this.consumerKey = process.env.SALESFORCE_SPEECH_CONSUMER_KEY || '';
+    this.consumerSecret = process.env.SALESFORCE_SPEECH_CONSUMER_SECRET || '';
+
+    this.configured = !!(domainUrl && this.consumerKey && this.consumerSecret);
+
+    if (!this.configured) {
+      console.warn('⚠️  Salesforce Speech environment variables not set — STT/TTS will be unavailable');
+      this.domainUrl = '';
+      return;
     }
 
     // Ensure the domain URL has a protocol
     if (!domainUrl.startsWith('http://') && !domainUrl.startsWith('https://')) {
       domainUrl = `https://${domainUrl}`;
     }
-    
+
     // Remove trailing slash if present
     this.domainUrl = domainUrl.replace(/\/$/, '');
   }
 
+  private ensureConfigured() {
+    if (!this.configured) {
+      throw new Error('Missing required Salesforce Speech Foundations environment variables');
+    }
+  }
+
   private async getAccessToken(): Promise<string> {
+    this.ensureConfigured();
     // Check if we have a valid token
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;

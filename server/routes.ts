@@ -125,6 +125,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Speech-to-Text using Einstein Transcribe
   app.post('/api/stt', upload.single('file'), async (req, res) => {
+    const sttStart = Date.now();
+
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file provided' });
@@ -139,10 +141,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Read audio file
       const audioBuffer = fs.readFileSync(req.file.path);
-      
+
       // Use Einstein Transcribe
       const transcription = await speechFoundationsClient.transcribeAudio(
-        audioBuffer, 
+        audioBuffer,
         req.file.mimetype,
         'english' // Default to English, can be made configurable
       );
@@ -150,9 +152,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clean up uploaded file
       fs.unlinkSync(req.file.path);
 
-      res.json({ 
+      const sttMs = Date.now() - sttStart;
+
+      res.json({
         text: transcription,
-        duration: 0 // Duration not available from Einstein Transcribe API
+        duration: 0, // Duration not available from Einstein Transcribe API
+        transparency: {
+          sttProcessingMs: sttMs,
+          audioSizeBytes: req.file.size,
+          mimeType: req.file.mimetype,
+        }
       });
     } catch (error) {
       console.error('Error transcribing audio:', error);
@@ -291,9 +300,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Agentforce integration
   app.post('/api/agentforce', async (req, res) => {
+    const pipelineStart = Date.now();
+
     try {
       const { text, conversationId } = req.body;
-      
+
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
@@ -309,15 +320,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Call Agentforce API with session persistence
-      const { response, sessionId } = await agentforceClient.chatWithAgentInConversation(
-        text, 
+      const { response, sessionId, metadata } = await agentforceClient.chatWithAgentInConversation(
+        text,
         conversation.sessionId || undefined
       );
 
       // Validate response is not undefined or empty
       if (!response || typeof response !== 'string' || response.trim() === '') {
         console.error('❌ Agent returned invalid response:', response);
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'Agent response invalid',
           details: 'The agent did not provide a valid text response'
         });
@@ -330,16 +341,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateConversationSessionId(conversationId, sessionId);
       }
 
-      res.json({ 
+      const totalPipelineMs = Date.now() - pipelineStart;
+
+      res.json({
         text: response,
         conversationId,
-        sessionId // Include sessionId in response for debugging
+        sessionId,
+        // Transparency panel data
+        transparency: {
+          pipeline: {
+            totalMs: totalPipelineMs,
+            agentProcessingMs: metadata.agentProcessingMs,
+            sessionCreationMs: metadata.sessionCreationMs,
+          },
+          session: {
+            sessionId: metadata.sessionId,
+            isNewSession: metadata.isNewSession,
+          },
+          response: {
+            messageCount: metadata.messageCount,
+            messageTypes: metadata.messageTypes,
+            status: metadata.status,
+          },
+          rawApiResponse: metadata.rawResponse,
+          timestamp: new Date().toISOString(),
+        }
       });
     } catch (error: any) {
       console.error('Error calling Agentforce:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to get Agentforce response',
-        details: error.message 
+        details: error.message
       });
     }
   });

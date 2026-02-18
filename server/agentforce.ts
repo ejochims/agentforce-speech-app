@@ -18,10 +18,26 @@ interface AgentforceMessageResponse {
   sessionId?: string;
   messageId?: string;
   message?: string;
-  messages?: Array<{ message: string; [key: string]: any }>;
+  messages?: Array<{ message: string; type?: string; [key: string]: any }>;
   status?: string;
   responseTime?: number;
   [key: string]: any; // Allow for flexible response structure
+}
+
+// Rich metadata returned alongside agent responses for the transparency panel
+export interface AgentResponseMetadata {
+  // Timing
+  agentProcessingMs: number;
+  sessionCreationMs?: number;
+  // Session info
+  sessionId: string;
+  isNewSession: boolean;
+  // Raw API response (everything the API returned)
+  rawResponse: Record<string, any>;
+  // Parsed fields from the response
+  messageCount: number;
+  messageTypes: string[];
+  status?: string;
 }
 
 export class AgentforceClient {
@@ -33,18 +49,29 @@ export class AgentforceClient {
   private tokenExpiry: number | null = null;
   private instanceUrl: string | null = null;
 
-  constructor() {
-    this.domainUrl = process.env.SALESFORCE_DOMAIN_URL!;
-    this.consumerKey = process.env.SALESFORCE_CONSUMER_KEY!;
-    this.consumerSecret = process.env.SALESFORCE_CONSUMER_SECRET!;
-    this.agentId = process.env.SALESFORCE_AGENT_ID!;
+  private configured = false;
 
-    if (!this.domainUrl || !this.consumerKey || !this.consumerSecret || !this.agentId) {
+  constructor() {
+    this.domainUrl = process.env.SALESFORCE_DOMAIN_URL || '';
+    this.consumerKey = process.env.SALESFORCE_CONSUMER_KEY || '';
+    this.consumerSecret = process.env.SALESFORCE_CONSUMER_SECRET || '';
+    this.agentId = process.env.SALESFORCE_AGENT_ID || '';
+
+    this.configured = !!(this.domainUrl && this.consumerKey && this.consumerSecret && this.agentId);
+
+    if (!this.configured) {
+      console.warn('⚠️  Salesforce environment variables not set — Agentforce will run in stub mode');
+    }
+  }
+
+  private ensureConfigured() {
+    if (!this.configured) {
       throw new Error('Missing required Salesforce environment variables');
     }
   }
 
   private async getAccessToken(): Promise<string> {
+    this.ensureConfigured();
     // Check if we have a valid token
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;
@@ -147,7 +174,7 @@ export class AgentforceClient {
     return response.sessionId;
   }
 
-  async sendMessage(sessionId: string, message: string): Promise<string> {
+  async sendMessage(sessionId: string, message: string): Promise<{ text: string; rawResponse: AgentforceMessageResponse }> {
     const payload = {
       message: {
         sequenceId: 1,
@@ -158,22 +185,26 @@ export class AgentforceClient {
 
     console.log('Sending message payload:', JSON.stringify(payload, null, 2));
     const response: AgentforceMessageResponse = await this.makeApiCall(
-      `/sessions/${sessionId}/messages`, 
-      'POST', 
+      `/sessions/${sessionId}/messages`,
+      'POST',
       payload
     );
 
     // Extract the message from the response - it may be in a different format
     // The API might return messages array or a single message
+    let text: string;
     if (response.messages && response.messages.length > 0) {
       const lastMessage = response.messages[response.messages.length - 1];
       if (lastMessage && lastMessage.message) {
-        return lastMessage.message;
+        text = lastMessage.message;
+      } else {
+        text = response.message || 'Response received from agent';
       }
+    } else {
+      text = response.message || 'Response received from agent';
     }
-    
-    // Ensure we always return a string, never undefined
-    return response.message || 'Response received from agent';
+
+    return { text, rawResponse: response };
   }
 
   async endSession(sessionId: string): Promise<boolean> {
@@ -189,22 +220,22 @@ export class AgentforceClient {
 
   async chatWithAgent(message: string): Promise<string> {
     let sessionId: string | null = null;
-    
+
     try {
       console.log('🤖 Starting chat with Agentforce agent, message:', message);
-      
+
       // Start a new session
       sessionId = await this.startSession();
       console.log('Session started with ID:', sessionId);
-      
+
       // Send the message and get response
-      const response = await this.sendMessage(sessionId, message);
-      console.log('Received response from agent:', response);
-      
-      return response;
+      const { text } = await this.sendMessage(sessionId, message);
+      console.log('Received response from agent:', text);
+
+      return text;
     } catch (error: any) {
       console.error('Error in chat with agent:', error);
-      
+
       // Return helpful fallback message while preserving the error for debugging
       return `I tried to connect with your Agentforce agent to respond to: "${message}"
 
@@ -222,34 +253,51 @@ All the voice conversation infrastructure is ready - once we resolve this API co
   }
 
   // New method for conversation-based chat with session persistence
-  async chatWithAgentInConversation(message: string, existingSessionId?: string): Promise<{ response: string; sessionId: string }> {
+  async chatWithAgentInConversation(message: string, existingSessionId?: string): Promise<{ response: string; sessionId: string; metadata: AgentResponseMetadata }> {
     let sessionId = existingSessionId;
-    
+    const isNewSession = !sessionId;
+    let sessionCreationMs: number | undefined;
+
     try {
       console.log('🤖 Chat with Agentforce agent in conversation, message:', message);
-      
+
       // Only start a new session if we don't have one
       if (!sessionId) {
+        const sessionStart = Date.now();
         sessionId = await this.startSession();
-        console.log('New session started with ID:', sessionId);
+        sessionCreationMs = Date.now() - sessionStart;
+        console.log(`New session started with ID: ${sessionId} (${sessionCreationMs}ms)`);
       } else {
         console.log('Reusing existing session ID:', sessionId);
       }
-      
-      // Send the message and get response
-      const response = await this.sendMessage(sessionId, message);
-      console.log('Received response from agent:', response);
-      
-      return { response, sessionId };
+
+      // Send the message and measure processing time
+      const agentStart = Date.now();
+      const { text, rawResponse } = await this.sendMessage(sessionId, message);
+      const agentProcessingMs = Date.now() - agentStart;
+      console.log(`Received response from agent (${agentProcessingMs}ms):`, text);
+
+      const metadata: AgentResponseMetadata = {
+        agentProcessingMs,
+        sessionCreationMs,
+        sessionId,
+        isNewSession,
+        rawResponse,
+        messageCount: rawResponse.messages?.length || (rawResponse.message ? 1 : 0),
+        messageTypes: rawResponse.messages?.map((m: any) => m.type || 'unknown') || [],
+        status: rawResponse.status,
+      };
+
+      return { response: text, sessionId, metadata };
     } catch (error: any) {
       console.error('Error in conversation chat with agent:', error);
-      
+
       // If session failed, it might be expired - try with a new session
       if (existingSessionId && error.message.includes('404')) {
         console.log('Session expired, starting new session...');
         return this.chatWithAgentInConversation(message); // Retry without sessionId
       }
-      
+
       // Return helpful fallback message while preserving the error for debugging
       const fallbackResponse = `I tried to connect with your Agentforce agent to respond to: "${message}"
 
@@ -258,10 +306,22 @@ However, I'm still experiencing connectivity issues with the Salesforce Agent AP
 Error details: ${error.message}
 
 All the voice conversation infrastructure is ready - once we resolve this API connectivity, you'll have a complete voice-first Agentforce experience!`;
-      
+
+      const errorMetadata: AgentResponseMetadata = {
+        agentProcessingMs: 0,
+        sessionCreationMs,
+        sessionId: sessionId || 'error',
+        isNewSession,
+        rawResponse: { error: error.message },
+        messageCount: 0,
+        messageTypes: [],
+        status: 'error',
+      };
+
       return {
         response: fallbackResponse,
-        sessionId: sessionId || 'error'
+        sessionId: sessionId || 'error',
+        metadata: errorMetadata,
       };
     }
     // NOTE: Don't end session here - keep it alive for the conversation
