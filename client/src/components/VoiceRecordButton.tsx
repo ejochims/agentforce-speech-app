@@ -45,6 +45,10 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  // Refs for reliable PTT state (don't depend on React render cycle)
+  const isStartingRef = useRef(false);   // true while getUserMedia/setup is in progress
+  const pendingStopRef = useRef(false);  // true if stop was requested before setup finished
+
   // Haptic feedback helper
   const triggerHapticFeedback = (pattern: number | number[]) => {
     if ('vibrate' in navigator) {
@@ -58,6 +62,14 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   };
 
   const startRecording = async () => {
+    // Guard: don't allow concurrent starts
+    if (isStartingRef.current || mediaRecorder.current?.state === 'recording') {
+      console.log('startRecording: already starting or recording, ignoring');
+      return;
+    }
+    isStartingRef.current = true;
+    pendingStopRef.current = false;
+
     try {
       console.log('Attempting to start recording...');
       
@@ -119,10 +131,21 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       
       recorder.start(100); // Record in 100ms chunks for better data capture
       mediaRecorder.current = recorder;
+      isStartingRef.current = false; // setup complete
+
+      // If stop was requested while we were setting up, honour it now
+      if (pendingStopRef.current) {
+        pendingStopRef.current = false;
+        recorder.stop();
+        stream.getTracks().forEach(track => track.stop());
+        console.log('Recording immediately stopped (pending stop from PTT release)');
+        return;
+      }
+
       setIsRecording(true);
       setRecordingDuration(0);
       startTimeRef.current = Date.now();
-      
+
       // Start duration counter + auto-stop at maxDuration
       durationIntervalRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -137,13 +160,15 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
           triggerHapticFeedback([10, 50, 10]);
         }
       }, 100);
-      
+
       // Trigger haptic feedback on successful recording start
       triggerHapticFeedback(10);
-      
+
       onRecordingStart?.();
       console.log('Recording started successfully');
     } catch (error) {
+      isStartingRef.current = false;
+      pendingStopRef.current = false;
       console.error('Error starting recording:', error);
       
       // Handle different types of recording errors
@@ -168,41 +193,44 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   };
 
   const stopRecording = useCallback((cancelled: boolean = false) => {
-    if (mediaRecorder.current && isRecording) {
+    // If still setting up (getUserMedia hasn't finished), queue a pending stop
+    if (isStartingRef.current) {
+      console.log('stopRecording: recording still starting — queuing pending stop');
+      pendingStopRef.current = true;
+      return;
+    }
+
+    // Use the ref state (synchronous) rather than React state (async) for reliability
+    if (mediaRecorder.current?.state === 'recording') {
       const recordingTime = Date.now() - startTimeRef.current;
       console.log(`${cancelled ? 'Cancelling' : 'Stopping'} recording after ${recordingTime}ms...`);
-      
-      // Trigger haptic feedback
+
       triggerHapticFeedback(20);
-      
-      // Clear duration interval
+
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
         durationIntervalRef.current = null;
       }
-      
+
       if (cancelled) {
-        // Clear audio chunks to prevent processing
         audioChunks.current = [];
-        // Just stop the recorder without processing
         mediaRecorder.current.stop();
         setIsRecording(false);
         setRecordingDuration(0);
         console.log('Recording cancelled');
         return;
       }
-      
-      // Check if recording is too short
-      if (recordingTime < 500) { // Less than 0.5 seconds
+
+      if (recordingTime < 500) {
         console.warn('Recording too short, may not contain audio data');
       }
-      
+
       mediaRecorder.current.stop();
       setIsRecording(false);
       setRecordingDuration(0);
       console.log('Recording stopped');
     }
-  }, [isRecording]);
+  }, []); // no dependency on isRecording — uses refs for reliability
 
   // Expose imperative API so parent can trigger recording programmatically (e.g. Space PTT)
   useImperativeHandle(ref, () => ({
