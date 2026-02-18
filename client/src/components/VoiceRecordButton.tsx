@@ -1,9 +1,14 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Mic, MicOff, AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AudioVisualizer from './AudioVisualizer';
 
 type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
+
+export interface VoiceRecordButtonHandle {
+  startRecording: () => Promise<void>;
+  stopRecording: (cancelled?: boolean) => void;
+}
 
 interface VoiceRecordButtonProps {
   onBeforeRecording?: () => Promise<void> | void; // Called BEFORE recording starts
@@ -15,19 +20,21 @@ interface VoiceRecordButtonProps {
   error?: string;
   onRetry?: () => void;
   maxDuration?: number; // seconds, default 120
+  holdToRecord?: boolean; // Hold-button / push-to-talk mode
 }
 
-export default function VoiceRecordButton({ 
+const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonProps>(function VoiceRecordButton({
   onBeforeRecording,
-  onRecordingStart, 
-  onRecordingStop, 
+  onRecordingStart,
+  onRecordingStop,
   onError,
   disabled = false,
   state = 'idle',
   error,
   onRetry,
   maxDuration = 120,
-}: VoiceRecordButtonProps) {
+  holdToRecord = false,
+}, ref) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
@@ -197,25 +204,48 @@ export default function VoiceRecordButton({
     }
   }, [isRecording]);
 
+  // Expose imperative API so parent can trigger recording programmatically (e.g. Space PTT)
+  useImperativeHandle(ref, () => ({
+    startRecording,
+    stopRecording,
+  }));
+
   const handleToggleRecording = () => {
     if (disabled || state === 'processing') return;
-    
+
     if (state === 'error' && onRetry) {
       onRetry();
       return;
     }
-    
+
     if (isRecording) {
       stopRecording(false);
     } else {
       startRecording();
     }
   };
-  
+
+  // Hold-to-record pointer handlers
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!holdToRecord || disabled || state === 'processing') return;
+    e.preventDefault();
+    (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+    if (!isRecording) startRecording();
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!holdToRecord || disabled) return;
+    if (isRecording) stopRecording(false);
+  };
+
+  const handlePointerCancel = () => {
+    if (holdToRecord && isRecording) stopRecording(true); // cancel on accidental lift
+  };
+
   // Keyboard navigation handler
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
-    
+
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       handleToggleRecording();
@@ -267,7 +297,7 @@ export default function VoiceRecordButton({
       case 'error':
         return error || 'Recording failed • Tap to retry';
       default:
-        return 'Tap to record';
+        return holdToRecord ? 'Hold to speak' : 'Tap to record';
     }
   };
   
@@ -314,8 +344,12 @@ export default function VoiceRecordButton({
           disabled={disabled}
           className={`${getButtonClassName()} ${
             state === 'recording' ? 'animate-recording-breathe' : ''
-          }`}
-          onClick={handleToggleRecording}
+          } ${holdToRecord ? 'select-none touch-none' : ''}`}
+          onClick={holdToRecord ? undefined : handleToggleRecording}
+          onPointerDown={holdToRecord ? handlePointerDown : undefined}
+          onPointerUp={holdToRecord ? handlePointerUp : undefined}
+          onPointerLeave={holdToRecord ? handlePointerCancel : undefined}
+          onPointerCancel={holdToRecord ? handlePointerCancel : undefined}
           onKeyDown={handleKeyDown}
           data-testid="button-voice-record"
           aria-label={getStatusText()}
@@ -366,4 +400,6 @@ export default function VoiceRecordButton({
       </div>
     </div>
   );
-}
+});
+
+export default VoiceRecordButton;
