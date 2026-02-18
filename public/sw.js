@@ -1,9 +1,15 @@
 // Agentforce Voice Assistant Service Worker
-const CACHE_NAME = 'agentforce-voice-v1';
+// IMPORTANT: bump this version string on every deploy so stale caches are cleared
+const CACHE_NAME = 'agentforce-voice-v3';
+
+// Only pre-cache static, non-HTML assets.
+// The HTML page (/) must NEVER be cached here because it contains
+// Vite-generated content-hashed filenames that change on every build.
+// Caching it causes "blank white page" after deployments because the
+// cached HTML references asset filenames that no longer exist on the server.
 const urlsToCache = [
-  '/',
   '/manifest.json',
-  // Static assets will be automatically cached by Vite in production
+  '/agentforce-logo.png',
 ];
 
 // Install event - cache essential resources
@@ -42,54 +48,52 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache with network fallback
+// Fetch event
 self.addEventListener('fetch', event => {
-  // Only handle GET requests
-  if (event.request.method !== 'GET') {
+  // Only handle GET requests over http(s)
+  if (event.request.method !== 'GET') return;
+  if (!event.request.url.startsWith('http')) return;
+
+  const url = new URL(event.request.url);
+
+  // Always bypass the SW for API calls and audio streams
+  if (url.pathname.startsWith('/api/') ||
+      url.pathname.includes('audio') ||
+      url.pathname.includes('tts')) {
     return;
   }
 
-  // Skip non-http(s) requests
-  if (!event.request.url.startsWith('http')) {
+  // HTML pages — ALWAYS network-first, never serve stale HTML.
+  // This is critical: the HTML contains hashed Vite asset filenames that
+  // change on every deploy. Serving cached HTML after a deploy causes 404s
+  // on the JS/CSS bundles, resulting in a blank white page.
+  const isHtml = url.pathname === '/' ||
+                 url.pathname.endsWith('.html') ||
+                 !url.pathname.includes('.');
+  if (isHtml) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
     return;
   }
 
-  // Skip API calls and audio streams - always fetch fresh
-  if (event.request.url.includes('/api/') || 
-      event.request.url.includes('audio/') ||
-      event.request.url.includes('tts')) {
-    return;
-  }
-
+  // Content-addressed static assets (/assets/index-HASH.js etc.) —
+  // cache-first since the hash guarantees freshness.
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version or fetch from network
-        if (response) {
+    caches.match(event.request).then(cached => {
+      if (cached) return cached;
+
+      return fetch(event.request).then(response => {
+        if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-        
-        return fetch(event.request).then(response => {
-          // Don't cache if not a valid response
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-
-          // Clone the response for caching
-          const responseToCache = response.clone();
-          
-          caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, responseToCache);
-            });
-
-          return response;
-        });
-      })
-      .catch(() => {
-        // Fallback for offline - could show offline page
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      }).catch(() => {
         console.log('[SW] Fetch failed for:', event.request.url);
-      })
+      });
+    })
   );
 });
 
