@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Mic, MicOff, AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AudioVisualizer from './AudioVisualizer';
@@ -29,6 +29,7 @@ export default function VoiceRecordButton({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
@@ -68,6 +69,7 @@ export default function VoiceRecordButton({
       }
       
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setLiveStream(stream);
       console.log('Got media stream:', stream);
       
       // Force webm format for better compatibility with OpenAI Whisper
@@ -92,7 +94,8 @@ export default function VoiceRecordButton({
       
       recorder.onstop = () => {
         console.log('MediaRecorder stopped, processing audio...');
-        
+        setLiveStream(null);
+
         // Only process if we have audio chunks (not cancelled)
         if (audioChunks.current.length > 0) {
           // Use the actual mime type from MediaRecorder instead of forcing audio/wav
@@ -101,7 +104,7 @@ export default function VoiceRecordButton({
           console.log('Created audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
           onRecordingStop?.(audioBlob);
         }
-        
+
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -281,7 +284,7 @@ export default function VoiceRecordButton({
       {/* Audio Visualizer - Show during recording */}
       {state === 'recording' && (
         <div className="transition-all duration-300" role="img" aria-label="Audio visualization showing voice input levels">
-          <AudioVisualizer isActive={true} height={32} />
+          <AudioVisualizer isActive={true} stream={liveStream} height={32} />
         </div>
       )}
       

@@ -1,4 +1,4 @@
-import { Bot, User, CheckCheck, Clock } from 'lucide-react';
+import { Bot, User, CheckCheck, Clock, Copy, Check } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
 import { useState, useEffect } from 'react';
@@ -15,20 +15,33 @@ interface MessageBubbleProps {
   messageState?: 'sending' | 'sent' | 'delivered' | 'error';
   showAvatar?: boolean;
   showTimestamp?: boolean;
+  isPlaying?: boolean;
 }
 
-export default function MessageBubble({ 
-  message, 
-  isUser, 
+export default function MessageBubble({
+  message,
+  isUser,
   timestamp,
   isTyping = false,
   isFirstInGroup = true,
   isLastInGroup = true,
   messageState = 'sent',
   showAvatar = true,
-  showTimestamp = true
+  showTimestamp = true,
+  isPlaying = false,
 }: MessageBubbleProps) {
   const [hasAnimated, setHasAnimated] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API unavailable — silently ignore
+    }
+  };
   
   const formattedTimestamp = timestamp 
     ? typeof timestamp === 'string' 
@@ -54,9 +67,9 @@ export default function MessageBubble({
     : `${isUser ? 'You' : 'Agentforce'} said: ${message}${formattedTimestamp ? ` at ${formattedTimestamp}` : ''}`;
 
   return (
-    <div 
+    <div
       className={`
-        flex items-end gap-sm 
+        group flex items-end gap-sm
         ${isUser ? 'justify-end' : 'justify-start'}
         ${isFirstInGroup ? 'mt-lg' : 'mt-xs'}
         ${isLastInGroup ? 'mb-lg' : 'mb-xs'}
@@ -119,6 +132,21 @@ export default function MessageBubble({
             <span className="sr-only">{screenReaderText}</span>
           )}
           
+          {/* Copy button — appears on hover, always accessible */}
+          {!isTyping && message && (
+            <button
+              onClick={handleCopy}
+              className="absolute -top-2 right-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-150 w-6 h-6 rounded-full bg-background/80 backdrop-blur-sm border border-border flex items-center justify-center shadow-sm hover:bg-muted"
+              aria-label={copied ? 'Copied!' : 'Copy message'}
+              title={copied ? 'Copied!' : 'Copy message'}
+            >
+              {copied
+                ? <Check className="w-3 h-3 text-green-500" />
+                : <Copy className="w-3 h-3 text-muted-foreground" />
+              }
+            </button>
+          )}
+
           {isTyping ? (
             <div className="flex gap-1 items-center py-1" aria-hidden="true">
               <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]" />
@@ -131,7 +159,24 @@ export default function MessageBubble({
               <p className="text-base leading-relaxed whitespace-pre-wrap" aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}>
                 {message}
               </p>
-              
+
+              {/* Waveform indicator when this message's audio is playing */}
+              {isPlaying && !isUser && (
+                <div className="flex items-end gap-[2px] h-3 mt-xs" aria-label="Audio playing" aria-hidden="true">
+                  {[0, 150, 300, 150, 0].map((delay, i) => (
+                    <div
+                      key={i}
+                      className="w-[2px] rounded-full bg-primary/60 animate-bounce"
+                      style={{
+                        height: `${[6, 10, 13, 10, 6][i]}px`,
+                        animationDelay: `${delay}ms`,
+                        animationDuration: '700ms',
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
               {/* Message State Indicator for User Messages */}
               {isUser && messageState && (
                 <div className={`flex items-center justify-end gap-xs text-xs ${

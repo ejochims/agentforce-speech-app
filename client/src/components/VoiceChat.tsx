@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown } from 'lucide-react';
 import { 
   Drawer,
   DrawerContent,
@@ -82,6 +82,14 @@ export default function VoiceChat() {
   const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
   const isAudioUnlockingRef = useRef<boolean>(false);
 
+  // Currently-playing audio element (for stop/interrupt)
+  const currentPlayingAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Scroll tracking for auto-scroll + jump-to-latest
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const isNearBottomRef = useRef(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
   // Global keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -101,6 +109,16 @@ export default function VoiceChat() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isHistoryOpen, isRecording, setRecordingState, setIsRecording]);
+
+  // Scroll handler: track whether user is near the bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = distFromBottom < 120;
+    isNearBottomRef.current = near;
+    setShowScrollButton(!near);
+  }, []);
 
   // Auto-initialize audio context for returning users who previously enabled audio
   useEffect(() => {
@@ -435,6 +453,14 @@ export default function VoiceChat() {
     },
   });
 
+  // Auto-scroll to bottom when new content arrives, if already near bottom
+  useEffect(() => {
+    if (isNearBottomRef.current && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turns.length, pendingMessages.size, streamingText, agentPending]);
+
   // Stream agent response via SSE, with fallback to the blocking mutation
   const streamAgentResponse = async (userText: string, convId: string) => {
     setIsAgentStreaming(true);
@@ -600,6 +626,16 @@ export default function VoiceChat() {
       isAudioUnlockingRef.current = false;
     }
   };
+
+  const stopAudio = useCallback(() => {
+    const audio = currentPlayingAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      currentPlayingAudioRef.current = null;
+    }
+    setIsAudioPlaying(false);
+  }, []);
 
   const handleRecordingStart = () => {
     setIsRecording(true);
@@ -821,6 +857,7 @@ export default function VoiceChat() {
           audio.play()
             .then(() => {
               console.log('✓ Audio playback started successfully');
+              currentPlayingAudioRef.current = audio;
               setIsAudioPlaying(true);
               resolve(true);
             })
@@ -860,6 +897,7 @@ export default function VoiceChat() {
 
         const onEnded = () => {
           console.log('✓ Audio playback completed');
+          currentPlayingAudioRef.current = null;
           setIsAudioPlaying(false);
           cleanup();
         };
@@ -975,6 +1013,9 @@ export default function VoiceChat() {
                                 setCurrentConversationId(conversation.id);
                                 localStorage.setItem('currentConversationId', conversation.id);
                                 queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+                                // Clear transparency events — they belong to the previous session
+                                setPipelineEvents([]);
+                                currentPipelineRef.current = null;
                               }
                               setIsHistoryOpen(false);
                             }}
@@ -1106,7 +1147,13 @@ export default function VoiceChat() {
       <div className="flex flex-1 overflow-hidden">
 
       {/* Main Content Area */}
-      <main className={`app-content relative flex-1 transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''}`} role="main" aria-label="Chat conversation">
+      <main
+        ref={(el) => { scrollContainerRef.current = el; }}
+        onScroll={handleScroll}
+        className={`app-content relative flex-1 transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''}`}
+        role="main"
+        aria-label="Chat conversation"
+      >
         {showConversation ? (
           // Conversation Mode
           <div className="px-lg py-lg space-y-lg h-full">
@@ -1270,6 +1317,11 @@ export default function VoiceChat() {
                 const isFirstInGroup = !isGroupedWithPrevious;
                 const isLastInGroup = !isGroupedWithNext;
                 
+                const isLastAgentTurn =
+                  turn.role === 'assistant' &&
+                  index === turns.length - 1 &&
+                  !isAgentStreaming;
+
                 return (
                   <MessageBubble
                     key={turn.id}
@@ -1281,6 +1333,7 @@ export default function VoiceChat() {
                     showAvatar={true}
                     showTimestamp={true}
                     messageState="sent"
+                    isPlaying={isAudioPlaying && isLastAgentTurn}
                   />
                 );
               })}
@@ -1321,6 +1374,7 @@ export default function VoiceChat() {
                     showAvatar={true}
                     showTimestamp={false}
                     messageState="sent"
+                    isPlaying={isAudioPlaying}
                   />
                 </div>
               ) : (agentPending || isAgentStreaming) && (
@@ -1426,6 +1480,25 @@ export default function VoiceChat() {
             </div>
           </div>
         )}
+
+        {/* Jump to latest — absolute overlay, appears when user scrolls up in conversation */}
+        {showScrollButton && showConversation && (
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none z-10">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="rounded-full shadow-lg gap-1 px-md pointer-events-auto"
+              onClick={() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                setShowScrollButton(false);
+              }}
+              aria-label="Jump to latest message"
+            >
+              <ChevronDown className="w-4 h-4" />
+              Latest
+            </Button>
+          </div>
+        )}
       </main>
 
       </div>
@@ -1475,6 +1548,20 @@ export default function VoiceChat() {
 
             {/* Voice Interface */}
             <div className="flex flex-col items-center gap-lg">
+              {/* Stop Speaking — shown when TTS audio is active */}
+              {isAudioPlaying && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={stopAudio}
+                  className="rounded-full h-9 px-lg text-sm text-green-600 dark:text-green-400 border-green-500/40 hover:bg-green-500/10 gap-sm"
+                  aria-label="Stop speaking"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  Stop Speaking
+                </Button>
+              )}
+
               <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
                 <VoiceRecordButton
                   onBeforeRecording={unlockAudioForSafari}
