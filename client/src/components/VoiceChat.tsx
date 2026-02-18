@@ -1106,7 +1106,7 @@ export default function VoiceChat() {
       <div className="flex flex-1 overflow-hidden">
 
       {/* Main Content Area */}
-      <main className={`app-content relative flex-1 transition-all duration-200 ${showTransparency ? 'pr-80' : ''}`} role="main" aria-label="Chat conversation">
+      <main className={`app-content relative flex-1 transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''}`} role="main" aria-label="Chat conversation">
         {showConversation ? (
           // Conversation Mode
           <div className="px-lg py-lg space-y-lg h-full">
@@ -1347,31 +1347,40 @@ export default function VoiceChat() {
             <div className="flex flex-col items-center gap-8 text-center" data-testid="voice-center">
               {/* Agentforce Logo with Animation */}
               <div className={`relative transition-transform duration-300 ${
-                recordingState === 'recording' ? 'scale-110' : 
-                recordingState === 'processing' ? 'scale-105 animate-pulse' :
-                (agentPending || isAgentStreaming) ? 'scale-105 animate-pulse' :
+                recordingState === 'recording' ? 'scale-110' :
+                recordingState === 'processing' ? 'scale-105' :
+                (agentPending || isAgentStreaming) ? 'scale-105' :
                 isAudioPlaying ? 'scale-105' :
                 'scale-100'
               }`}>
-                {/* Ripple Rings for Voice Activity */}
-                {(recordingState === 'recording' || recordingState === 'processing') && (
+                {/* Ripple Rings — Listening (blue) */}
+                {recordingState === 'recording' && (
                   <>
-                    <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" />
-                    <div className="absolute inset-0 rounded-full border-2 border-primary/10 animate-ping" style={{ animationDelay: '0.5s' }} />
-                    <div className="absolute inset-0 rounded-full border-2 border-primary/5 animate-ping" style={{ animationDelay: '1s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-blue-500/30 animate-ping" />
+                    <div className="absolute inset-0 rounded-full border-2 border-blue-400/20 animate-ping" style={{ animationDelay: '0.5s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-blue-300/10 animate-ping" style={{ animationDelay: '1s' }} />
                   </>
                 )}
-                
-                {/* Ripple Rings for Agent Thinking / Streaming */}
+
+                {/* Ripple Rings — Processing (amber) */}
+                {recordingState === 'processing' && (
+                  <>
+                    <div className="absolute inset-0 rounded-full border-2 border-amber-500/30 animate-ping" />
+                    <div className="absolute inset-0 rounded-full border-2 border-amber-400/20 animate-ping" style={{ animationDelay: '0.4s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-amber-300/10 animate-ping" style={{ animationDelay: '0.8s' }} />
+                  </>
+                )}
+
+                {/* Ripple Rings — Agent Thinking / Streaming (purple) */}
                 {(agentPending || isAgentStreaming) && (
                   <>
-                    <div className="absolute inset-0 rounded-full border-2 border-yellow-500/25 animate-ping" />
-                    <div className="absolute inset-0 rounded-full border-2 border-yellow-400/15 animate-ping" style={{ animationDelay: '0.3s' }} />
-                    <div className="absolute inset-0 rounded-full border-2 border-yellow-300/10 animate-ping" style={{ animationDelay: '0.6s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-purple-500/30 animate-ping" />
+                    <div className="absolute inset-0 rounded-full border-2 border-purple-400/20 animate-ping" style={{ animationDelay: '0.3s' }} />
+                    <div className="absolute inset-0 rounded-full border-2 border-purple-300/10 animate-ping" style={{ animationDelay: '0.6s' }} />
                   </>
                 )}
-                
-                {/* Ripple Rings for Agent Speaking */}
+
+                {/* Ripple Rings — Agent Speaking (green) */}
                 {isAudioPlaying && (
                   <>
                     <div className="absolute inset-0 rounded-full border-2 border-green-500/30 animate-ping" />
@@ -1379,22 +1388,34 @@ export default function VoiceChat() {
                     <div className="absolute inset-0 rounded-full border-2 border-green-300/10 animate-ping" style={{ animationDelay: '0.8s' }} />
                   </>
                 )}
-                
-                {/* Logo Container */}
-                <div className="w-32 h-32 rounded-full bg-primary/10 flex items-center justify-center relative overflow-hidden">
-                  <img 
-                    src={agentforceLogo} 
-                    alt="Agentforce" 
+
+                {/* Logo Container — bg tints with state */}
+                <div className={`w-32 h-32 rounded-full flex items-center justify-center relative overflow-hidden transition-colors duration-500 ${
+                  recordingState === 'recording' ? 'bg-blue-500/10' :
+                  recordingState === 'processing' ? 'bg-amber-500/10' :
+                  (agentPending || isAgentStreaming) ? 'bg-purple-500/10' :
+                  isAudioPlaying ? 'bg-green-500/10' :
+                  'bg-primary/10'
+                }`}>
+                  <img
+                    src={agentforceLogo}
+                    alt="Agentforce"
                     className="w-20 h-20 object-contain"
                     data-testid="voice-mode-logo"
                   />
                 </div>
               </div>
-              
-              {/* Status Text */}
+
+              {/* Status Text — color-coded to match active state */}
               <div className="space-y-2">
                 <h2 className="text-xl font-semibold text-foreground">Voice Mode</h2>
-                <p className="text-sm text-muted-foreground max-w-sm">
+                <p className={`text-sm max-w-sm transition-colors duration-300 ${
+                  recordingState === 'recording' ? 'text-blue-500' :
+                  recordingState === 'processing' ? 'text-amber-500' :
+                  (agentPending || isAgentStreaming) ? 'text-purple-500' :
+                  isAudioPlaying ? 'text-green-500' :
+                  'text-muted-foreground'
+                }`}>
                   {recordingState === 'recording' ? 'Listening...' :
                    recordingState === 'processing' ? 'Processing your message...' :
                    (agentPending || isAgentStreaming) ? (streamingText ? 'Agent is responding...' : 'Thinking...') :
@@ -1420,7 +1441,7 @@ export default function VoiceChat() {
       </div>
 
       {/* Voice Composer */}
-      <footer className={`app-footer transition-all duration-200 ${showTransparency ? 'pr-80' : ''}`}>
+      <footer className={`app-footer transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''}`}>
         <div className="px-lg pt-lg pb-lg keyboard-aware">
           {/* Unified Composer Layout */}
           <div className="flex flex-col gap-lg">
