@@ -49,18 +49,29 @@ export class AgentforceClient {
   private tokenExpiry: number | null = null;
   private instanceUrl: string | null = null;
 
-  constructor() {
-    this.domainUrl = process.env.SALESFORCE_DOMAIN_URL!;
-    this.consumerKey = process.env.SALESFORCE_CONSUMER_KEY!;
-    this.consumerSecret = process.env.SALESFORCE_CONSUMER_SECRET!;
-    this.agentId = process.env.SALESFORCE_AGENT_ID!;
+  private configured = false;
 
-    if (!this.domainUrl || !this.consumerKey || !this.consumerSecret || !this.agentId) {
+  constructor() {
+    this.domainUrl = process.env.SALESFORCE_DOMAIN_URL || '';
+    this.consumerKey = process.env.SALESFORCE_CONSUMER_KEY || '';
+    this.consumerSecret = process.env.SALESFORCE_CONSUMER_SECRET || '';
+    this.agentId = process.env.SALESFORCE_AGENT_ID || '';
+
+    this.configured = !!(this.domainUrl && this.consumerKey && this.consumerSecret && this.agentId);
+
+    if (!this.configured) {
+      console.warn('⚠️  Salesforce environment variables not set — Agentforce will run in stub mode');
+    }
+  }
+
+  private ensureConfigured() {
+    if (!this.configured) {
       throw new Error('Missing required Salesforce environment variables');
     }
   }
 
   private async getAccessToken(): Promise<string> {
+    this.ensureConfigured();
     // Check if we have a valid token
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;

@@ -82,13 +82,20 @@ describe('AgentforceClient', () => {
   // ─── Constructor ────────────────────────────────────────────────────────────
 
   describe('constructor', () => {
-    it('throws when required env vars are missing', async () => {
-      // Delete an env var BEFORE importing so the singleton at module level
-      // also fails, proving the constructor guard works end-to-end.
+    it('constructs in stub mode when env vars are missing (no throw)', async () => {
       delete process.env.SALESFORCE_DOMAIN_URL;
-      await expect(import('../agentforce')).rejects.toThrow(
-        'Missing required Salesforce environment variables'
-      );
+      const { AgentforceClient } = await import('../agentforce');
+      // Should NOT throw — lazy init defers the error to first API call
+      expect(() => new AgentforceClient()).not.toThrow();
+    });
+
+    it('throws on first API call when env vars are missing', async () => {
+      delete process.env.SALESFORCE_DOMAIN_URL;
+      const { AgentforceClient } = await import('../agentforce');
+      const client = new AgentforceClient();
+      // The error surfaces when actually trying to use the client
+      const result = await client.chatWithAgent('Hello');
+      expect(result).toContain('connectivity issues');
     });
 
     it('constructs successfully when all env vars are present', async () => {
