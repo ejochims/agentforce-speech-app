@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil } from 'lucide-react';
-import { 
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -22,98 +24,47 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
 import VoiceRecordButton from './VoiceRecordButton';
 import MessageBubble from './MessageBubble';
 import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
-import AgentTransparencyPanel, { type PipelineEvent, type TransparencyData } from './AgentTransparencyPanel';
+import AgentTransparencyPanel from './AgentTransparencyPanel';
+import AudioVisualizer from './AudioVisualizer';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
+import { useAudioRecorder, type SttTransparency } from '@/hooks/useAudioRecorder';
+import { useAgentStream } from '@/hooks/useAgentStream';
+import { usePipelineTransparency } from '@/hooks/usePipelineTransparency';
+import { useConversation } from '@/hooks/useConversation';
 import type { Conversation, Turn } from '@shared/schema';
 
 const agentforceLogo = '/agentforce-logo.png';
 
-type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
-
 export default function VoiceChat() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  // ─── UI-only state ────────────────────────────────────────────────────────
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showConversation, setShowConversation] = useState<boolean>(() =>
+    localStorage.getItem('showConversation') === 'true'
+  );
   const [showTextInput, setShowTextInput] = useState(false);
   const [textMessage, setTextMessage] = useState('');
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isValidatingConversation, setIsValidatingConversation] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [showConversation, setShowConversation] = useState<boolean>(() => {
-    return localStorage.getItem('showConversation') === 'true'; // Default to false
-  });
-  const [pendingMessages, setPendingMessages] = useState<Map<string, { text: string; timestamp: Date; state: 'sending' | 'error'; conversationId: string; triggerAgent: boolean }>>(new Map());
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showTransparency, setShowTransparency] = useState<boolean>(() =>
+    localStorage.getItem('showTransparency') === 'true'
+  );
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
-  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
-  const [recordingError, setRecordingError] = useState<string | null>(null);
-  
-  // Transparency panel state
-  const [showTransparency, setShowTransparency] = useState<boolean>(() => {
-    return localStorage.getItem('showTransparency') === 'true';
-  });
-  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
-  const currentPipelineRef = useRef<{ id: string; startTime: number; userMessage: string } | null>(null);
+  const [showVoiceHint, setShowVoiceHint] = useState(
+    () => !localStorage.getItem('voiceHintSeen')
+  );
 
-  // Streaming agent response state
-  const [streamingText, setStreamingText] = useState<string | null>(null);
-  const [isAgentStreaming, setIsAgentStreaming] = useState(false);
-
-  // Audio permission and playback state
-  const [audioEnabled, setAudioEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('audioEnabled') === 'true';
-  });
-  const [showAudioPrompt, setShowAudioPrompt] = useState<boolean>(() => {
-    return localStorage.getItem('audioEnabled') === null;
-  });
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
-  const [pendingAudioText, setPendingAudioText] = useState<string | null>(null);
-  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
-  
+  // ─── Scroll tracking ──────────────────────────────────────────────────────
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const queryClient = useQueryClient();
-  
-  // Safari iOS workaround: Pre-create audio element during user gesture
-  const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
-  const isAudioUnlockingRef = useRef<boolean>(false);
-
-  // Currently-playing audio element (for stop/interrupt)
-  const currentPlayingAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Scroll tracking for auto-scroll + jump-to-latest
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const isNearBottomRef = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Global keyboard navigation (Escape only)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (isHistoryOpen) {
-          e.preventDefault();
-          setIsHistoryOpen(false);
-        } else if (isRecording) {
-          e.preventDefault();
-          setRecordingState('idle');
-          setIsRecording(false);
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHistoryOpen, isRecording]);
-
-  // Scroll handler: track whether user is near the bottom
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -123,868 +74,244 @@ export default function VoiceChat() {
     setShowScrollButton(!near);
   }, []);
 
-  // Auto-initialize audio context for returning users who previously enabled audio
-  useEffect(() => {
-    const restoreAudioContext = async () => {
-      // Only auto-initialize if user previously enabled audio and we don't have a context yet
-      if (audioEnabled && !audioContext) {
-        console.log('🔊 Auto-restoring audio context for returning user...');
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          
-          // AudioContext might be suspended initially, but we don't resume it here
-          // It will be resumed automatically when we try to play audio
-          setAudioContext(ctx);
-          console.log('✓ Audio context restored successfully');
-        } catch (error) {
-          const errorDetails = {
-            message: error instanceof Error ? error.message : String(error),
-            name: error instanceof Error ? error.name : 'Unknown',
-            stack: error instanceof Error ? error.stack : undefined
-          };
-          console.error('❌ Failed to restore audio context:', errorDetails);
-          // If we can't create the context, disable audio
-          setAudioEnabled(false);
-          localStorage.setItem('audioEnabled', 'false');
-        }
-      }
-    };
+  // ─── Domain hooks ─────────────────────────────────────────────────────────
+  const tts = useTextToSpeech();
+  const transparency = usePipelineTransparency();
+  const { data: settings } = useQuery<{ agentforceMode: string }>({ queryKey: ['/api/settings'] });
 
-    restoreAudioContext();
-  }, []); // Run only once on mount
+  // Break circular dependency: useConversation.onTriggerAgent → agentStream.streamAgentResponse
+  // agentStream is initialized after conversation, so we use a stable ref.
+  const onTriggerAgentRef = useRef<((text: string, convId: string) => void) | null>(null);
 
-  // Initialize audio context with user gesture
-  const initializeAudio = useCallback(async () => {
-    try {
-      console.log('🔊 Initializing audio context...');
-      
-      // Create and resume audio context (for recording)
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-      
-      // Unlock HTML5 audio for Safari iOS (for TTS playback)
-      console.log('🔓 Unlocking HTML5 audio for iOS Safari...');
-      const silentAudio = new Audio();
-      silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
-      (silentAudio as any).playsInline = true;
-      silentAudio.muted = false;
-      try {
-        await silentAudio.play();
-        console.log('✓ HTML5 audio unlocked successfully');
-      } catch (e) {
-        console.log('⚠️ HTML5 audio unlock failed (may work anyway):', e);
-      }
-      
-      setAudioContext(ctx);
-      setAudioEnabled(true);
-      setShowAudioPrompt(false);
-      
-      // Store permission in localStorage
-      localStorage.setItem('audioEnabled', 'true');
-      
-      console.log('✓ Audio context initialized successfully');
-      
-      // If there's pending audio, play it now
-      if (pendingAudioText) {
-        console.log('🎵 Playing pending audio text:', pendingAudioText.substring(0, 50) + '...');
-        await playTextAsAudio(pendingAudioText);
-        setPendingAudioText(null);
-      }
-      
-      return true;
-    } catch (error) {
-      const errorDetails = {
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined
-      };
-      console.error('❌ Failed to initialize audio:', errorDetails);
-      setAudioEnabled(false);
-      localStorage.setItem('audioEnabled', 'false');
-      return false;
-    }
-  }, [pendingAudioText]);
-
-  // Disable audio function
-  const disableAudio = useCallback(() => {
-    console.log('🔇 Disabling audio...');
-    
-    if (audioContext) {
-      audioContext.close();
-      setAudioContext(null);
-    }
-    
-    setAudioEnabled(false);
-    setShowAudioPrompt(false);
-    setPendingAudioText(null);
-    localStorage.setItem('audioEnabled', 'false');
-  }, [audioContext]);
-
-  // Validate conversation on component mount
-  const validateAndSetConversation = useCallback(async (conversationId: string) => {
-    setIsValidatingConversation(true);
-    try {
-      // Try to fetch the conversation to validate it exists
-      const response = await fetch(`/api/conversations/${conversationId}`);
-      
-      if (response.ok) {
-        const conversation = await response.json();
-        console.log('✓ Valid conversation found:', conversationId);
-        setCurrentConversationId(conversationId);
-        return true;
-      } else {
-        throw new Error(`Conversation not found: ${response.status}`);
-      }
-    } catch (error) {
-      console.log('✗ Conversation validation failed:', error);
-      // Conversation doesn't exist, clean up localStorage and create new one
-      localStorage.removeItem('currentConversationId');
-      setCurrentConversationId(null);
-      return false;
-    } finally {
-      setIsValidatingConversation(false);
-    }
-  }, []);
-
-  // Initialize conversation on component mount
-  useEffect(() => {
-    const initializeConversation = async () => {
-      const existingConversationId = localStorage.getItem('currentConversationId');
-      
-      if (existingConversationId) {
-        console.log('🔍 Validating existing conversation:', existingConversationId);
-        const isValid = await validateAndSetConversation(existingConversationId);
-        
-        if (!isValid) {
-          console.log('📝 Creating new conversation after validation failed');
-          createConversation({ title: 'Voice Chat', status: 'active' });
-        }
-      } else {
-        console.log('📝 No existing conversation, creating new one');
-        createConversation({ title: 'Voice Chat', status: 'active' });
-      }
-    };
-    
-    initializeConversation();
-  }, [validateAndSetConversation]);
-
-  // Get current conversation turns
-  const { data: turns = [], isLoading: turnsLoading } = useQuery<Turn[]>({
-    queryKey: ['/api/conversations', currentConversationId, 'turns'],
-    enabled: !!currentConversationId && !isValidatingConversation,
+  const conversation = useConversation({
+    onTriggerAgent: useCallback((text: string, convId: string) => {
+      onTriggerAgentRef.current?.(text, convId);
+    }, []),
   });
 
-  // Get all conversations for history
-  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
-    queryKey: ['/api/conversations'],
-    enabled: true,
+  const agentStream = useAgentStream({
+    audioEnabled: tts.audioEnabled,
+    playTextAsAudio: tts.playTextAsAudio,
+    onSaveTurn: useCallback((conversationId: string, text: string) => {
+      conversation.createTurn({ conversationId, role: 'assistant', text });
+    }, [conversation.createTurn]),
+    onTransparencyUpdate: transparency.updateEventWithTransparency,
+    currentPipelineRef: transparency.currentPipelineRef,
+    onConversationExpired: conversation.recoverAndRetry,
   });
 
-  // Create conversation mutation with retry logic
-  const { mutate: createConversation } = useMutation({
-    mutationFn: (conversationData: { title: string; status: string; retryAgentRequest?: { text: string } }) =>
-      apiRequest('/api/conversations', { method: 'POST', body: { title: conversationData.title, status: conversationData.status } }),
-    onSuccess: (conversation: Conversation, variables) => {
-      console.log('✓ New conversation created:', conversation.id);
-      setCurrentConversationId(conversation.id);
-      localStorage.setItem('currentConversationId', conversation.id);
-      
-      // Invalidate queries to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-      
-      // If this was created due to a failed agent request, retry it now
-      if (variables.retryAgentRequest) {
-        console.log('🔄 Retrying agent request with new conversation');
-        setTimeout(() => {
-          streamAgentResponse(variables.retryAgentRequest!.text, conversation.id);
-        }, 100); // Small delay to ensure state is updated
-      }
-    },
-  });
+  // Wire the circular callback now that agentStream is initialized
+  onTriggerAgentRef.current = agentStream.streamAgentResponse;
 
-  // Function to start a new chat
-  const startNewChat = () => {
-    // Clear current conversation
-    setCurrentConversationId(null);
-    localStorage.removeItem('currentConversationId');
-
-    // Clear any text input
-    setTextMessage('');
-    setShowTextInput(false);
-
-    // Clear transparency pipeline events for the new conversation
-    setPipelineEvents([]);
-    currentPipelineRef.current = null;
-
-    // Invalidate and refetch queries to clear cached data
-    queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-
-    // Create a new conversation
-    createConversation({ title: 'Voice Chat', status: 'active' });
-  };
-
-  // Create turn mutation with message state tracking
-  const { mutate: createTurn } = useMutation({
-    mutationFn: (turnData: { conversationId: string; role: string; text: string; triggerAgent?: boolean; pendingId?: string }) => {
-      // Add pending message for user messages
-      if (turnData.role === 'user' && turnData.pendingId) {
-        setPendingMessages(prev => new Map(prev.set(turnData.pendingId!, {
-          text: turnData.text,
-          timestamp: new Date(),
-          state: 'sending',
-          conversationId: turnData.conversationId,
-          triggerAgent: turnData.triggerAgent ?? true,
-        })));
-      }
-      
-      return apiRequest(`/api/conversations/${turnData.conversationId}/turns`, {
-        method: 'POST',
-        body: { role: turnData.role, text: turnData.text },
+  const recorder = useAudioRecorder({
+    onTranscription: useCallback((text: string, sttTransparency: SttTransparency | null) => {
+      if (!conversation.currentConversationId) return;
+      const pipelineId = `pipeline-${Date.now()}`;
+      transparency.startEvent(
+        pipelineId,
+        text,
+        sttTransparency ? {
+          processingMs: sttTransparency.sttProcessingMs,
+          audioSizeBytes: sttTransparency.audioSizeBytes,
+          mimeType: sttTransparency.mimeType,
+        } : undefined,
+        tts.audioEnabled
+      );
+      const pendingId = `pending-${Date.now()}-${Math.random()}`;
+      conversation.createTurn({
+        conversationId: conversation.currentConversationId,
+        role: 'user',
+        text,
+        triggerAgent: true,
+        pendingId,
       });
-    },
-    onSuccess: (data, variables) => {
-      // Remove pending message on success
-      if (variables.pendingId) {
-        setPendingMessages(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(variables.pendingId!);
-          return newMap;
-        });
-      }
-      
-      queryClient.invalidateQueries({ queryKey: ['/api/conversations', currentConversationId, 'turns'] });
-      
-      // If this was a user turn that should trigger agent response, do it now
-      if (variables.triggerAgent && variables.role === 'user') {
-        streamAgentResponse(variables.text, variables.conversationId);
-      }
-    },
-    onError: (error, variables) => {
-      // Update pending message to error state
-      if (variables.pendingId) {
-        setPendingMessages(prev => new Map(prev.set(variables.pendingId!, {
-          text: variables.text,
-          timestamp: new Date(),
-          state: 'error',
-          conversationId: variables.conversationId,
-          triggerAgent: variables.triggerAgent ?? true,
-        })));
-      }
-      const errorDetails = {
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : 'Unknown',
-        status: (error as any)?.status,
-        response: (error as any)?.response,
-        stack: error instanceof Error ? error.stack : undefined
-      };
-      console.error('Error creating turn:', errorDetails);
-    },
+    }, [conversation.currentConversationId, conversation.createTurn, transparency, tts.audioEnabled]),
   });
 
-  // Rename a conversation title
-  const { mutate: updateConversationTitle } = useMutation({
-    mutationFn: ({ id, title }: { id: string; title: string }) =>
-      apiRequest(`/api/conversations/${id}`, { method: 'PATCH', body: { title } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-    },
-  });
-
-  const saveTitle = (id: string) => {
-    const trimmed = editingTitleValue.trim();
-    const original = conversations.find((c: any) => c.id === id)?.title;
-    if (trimmed && trimmed !== original) {
-      updateConversationTitle({ id, title: trimmed });
-    }
-    setEditingTitleId(null);
-  };
-
-  // Retry a failed pending message
-  const retryMessage = useCallback((pendingId: string) => {
-    const pending = pendingMessages.get(pendingId);
-    if (!pending || pending.state !== 'error') return;
-    setPendingMessages(prev => new Map(prev.set(pendingId, { ...pending, state: 'sending' })));
-    createTurn({
-      conversationId: pending.conversationId,
-      role: 'user',
-      text: pending.text,
-      triggerAgent: pending.triggerAgent,
-      pendingId,
-    });
-  }, [pendingMessages, createTurn]);
-
-  // Agentforce mutation with error handling
-  const { mutate: getAgentResponse, isPending: agentPending } = useMutation({
-    mutationFn: ({ text, conversationId }: { text: string; conversationId: string }) =>
-      apiRequest('/api/agentforce', { method: 'POST', body: { text, conversationId } }),
-    onSuccess: (response: { text: string; conversationId: string; transparency?: TransparencyData }) => {
-      if (currentConversationId) {
-        // Capture transparency data from the agent response
-        if (response.transparency && currentPipelineRef.current) {
-          const pipeline = currentPipelineRef.current;
-          const totalClientMs = Date.now() - pipeline.startTime;
-
-          setPipelineEvents(prev => {
-            const existing = prev.find(e => e.id === pipeline.id);
-            if (existing) {
-              return prev.map(e => e.id === pipeline.id ? {
-                ...e,
-                agent: response.transparency!,
-                totalClientMs,
-                ttsRequested: audioEnabled,
-              } : e);
-            }
-            // If no existing event (edge case), create one
-            return [...prev, {
-              id: pipeline.id,
-              userMessage: pipeline.userMessage,
-              timestamp: new Date().toISOString(),
-              agent: response.transparency!,
-              totalClientMs,
-              ttsRequested: audioEnabled,
-            }];
-          });
-
-          currentPipelineRef.current = null;
-        }
-
-        // Start TTS immediately for faster playback - don't wait for UI updates
-        playTextAsAudio(response.text);
-
-        // Create turn in parallel (UI update can happen while audio starts)
-        createTurn({
-          conversationId: currentConversationId,
-          role: 'assistant',
-          text: response.text,
-        });
-      }
-    },
-    onError: (error: any, variables) => {
-      const errorDetails = {
-        message: error?.message || String(error),
-        name: error?.name,
-        status: error?.status,
-        response: error?.response,
-        stack: error?.stack
-      };
-      console.error('Agentforce error:', errorDetails);
-      
-      // Check if it's a conversation not found error
-      if (error.message?.includes('Conversation not found') || 
-          error.status === 404 ||
-          (typeof error === 'string' && error.includes('404'))) {
-        console.log('🔄 Conversation not found, recovering by creating new conversation');
-        
-        // Clear current conversation and create a new one
-        localStorage.removeItem('currentConversationId');
-        setCurrentConversationId(null);
-        
-        // Create new conversation and retry the agent request
-        createConversation({ 
-          title: 'Voice Chat', 
-          status: 'active',
-          retryAgentRequest: { text: variables.text } // Pass data to retry after creation
-        });
-      }
-    },
-  });
-
-  // Auto-scroll to bottom when new content arrives, if already near bottom
+  // ─── Auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (isNearBottomRef.current && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turns.length, pendingMessages.size, streamingText, agentPending]);
+  }, [conversation.turns.length, conversation.pendingMessages.size, agentStream.streamingText, agentStream.agentPending]);
 
-  // Stream agent response via SSE, with fallback to the blocking mutation
-  const streamAgentResponse = async (userText: string, convId: string) => {
-    setIsAgentStreaming(true);
-    setStreamingText(null);
-
-    try {
-      const response = await fetch('/api/agentforce/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: userText, conversationId: convId }),
-      });
-
-      // If the server returned an error before sending SSE headers, fall back to the blocking endpoint
-      if (!response.ok || !response.body) {
-        console.warn('⚠️ Stream endpoint unavailable, falling back to blocking request');
-        setIsAgentStreaming(false);
-        getAgentResponse({ text: userText, conversationId: convId });
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulatedText = '';
-      let ttsStarted = false;
-      let doneReceived = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE blocks are separated by double newline
-        const blocks = buffer.split('\n\n');
-        buffer = blocks.pop() || '';
-
-        for (const block of blocks) {
-          const eventMatch = block.match(/^event: (\w+)/m);
-          const dataMatch = block.match(/^data: (.+)/ms);
-          if (!eventMatch || !dataMatch) continue;
-
-          const eventType = eventMatch[1];
-          let data: any;
-          try {
-            data = JSON.parse(dataMatch[1]);
-          } catch {
-            continue;
-          }
-
-          if (eventType === 'chunk') {
-            accumulatedText += data.text;
-            setStreamingText(accumulatedText);
-
-            // Start TTS on the first complete sentence to overlap generation and playback
-            if (!ttsStarted && audioEnabled && /[.!?]\s/.test(accumulatedText)) {
-              const firstSentenceMatch = accumulatedText.match(/^.*?[.!?](?:\s|$)/);
-              if (firstSentenceMatch) {
-                ttsStarted = true;
-                console.log('🎵 Early TTS: starting on first sentence');
-                playTextAsAudio(firstSentenceMatch[0].trim());
-              }
-            }
-          } else if (eventType === 'done') {
-            doneReceived = true;
-            // Clear streaming bubble — real turn will appear via query invalidation
-            setStreamingText(null);
-            setIsAgentStreaming(false);
-
-            // Update transparency panel
-            if (data.transparency && currentPipelineRef.current) {
-              const pipeline = currentPipelineRef.current;
-              const totalClientMs = Date.now() - pipeline.startTime;
-              setPipelineEvents(prev => prev.map(e =>
-                e.id === pipeline.id
-                  ? { ...e, agent: data.transparency, totalClientMs, ttsRequested: audioEnabled }
-                  : e
-              ));
-              currentPipelineRef.current = null;
-            }
-
-            // Play full TTS only if we haven't started early playback
-            if (!ttsStarted && audioEnabled) {
-              playTextAsAudio(data.text);
-            }
-
-            // Save the assistant turn
-            createTurn({
-              conversationId: convId,
-              role: 'assistant',
-              text: data.text,
-            });
-          } else if (eventType === 'error') {
-            console.error('❌ Streaming agent error:', data.error);
-            setStreamingText(null);
-            setIsAgentStreaming(false);
-            // Fall back to blocking request on stream error
-            getAgentResponse({ text: userText, conversationId: convId });
-          }
+  // ─── Keyboard navigation ──────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isHistoryOpen) {
+          e.preventDefault();
+          setIsHistoryOpen(false);
+        } else if (recorder.isRecording) {
+          e.preventDefault();
+          recorder.resetError();
         }
       }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHistoryOpen, recorder.isRecording]);
 
-      // Safety: if stream ended without a 'done' event and we still have text, save it
-      if (accumulatedText && !doneReceived) {
-        setStreamingText(null);
-        setIsAgentStreaming(false);
-        createTurn({ conversationId: convId, role: 'assistant', text: accumulatedText });
-        if (!ttsStarted && audioEnabled) playTextAsAudio(accumulatedText);
-      }
-    } catch (error) {
-      console.error('❌ Stream fetch error, falling back to blocking request:', error);
-      setStreamingText(null);
-      setIsAgentStreaming(false);
-      getAgentResponse({ text: userText, conversationId: convId });
-    }
-  };
+  // Auto-dismiss voice hint after 5s
+  useEffect(() => {
+    if (!showVoiceHint || showConversation) return;
+    const t = setTimeout(() => {
+      setShowVoiceHint(false);
+      localStorage.setItem('voiceHintSeen', '1');
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [showVoiceHint, showConversation]);
 
-  // Removed auto-scroll to prevent interference with user interactions
-  // Users can manually scroll to see new messages
-
-  // Unlock audio for Safari iOS - must be called BEFORE starting recording
-  const unlockAudioForSafari = async () => {
-    // Prevent multiple simultaneous unlock attempts
-    if (isAudioUnlockingRef.current || blessedAudioRef.current) {
-      return;
-    }
-    
-    isAudioUnlockingRef.current = true;
-    
-    try {
-      console.log('🔓 Unlocking audio for Safari iOS on user gesture...');
-      const audio = new Audio();
-      (audio as any).playsInline = true;
-      audio.preload = 'auto';
-      
-      // Play silent audio to unlock Safari's audio restrictions
-      // This MUST happen during the user gesture, BEFORE recording starts
-      const silentAudio = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
-      audio.src = silentAudio;
-      audio.muted = false;
-      audio.volume = 0.01; // Very quiet but not muted
-      
-      try {
-        // This play() call during user gesture unlocks audio for the session
-        await audio.play();
-        console.log('✓ Audio unlocked successfully for Safari iOS');
-        audio.pause();
-        audio.currentTime = 0;
-      } catch (e) {
-        console.warn('⚠️ Silent audio play failed (may still work):', e);
-      }
-      
-      blessedAudioRef.current = audio;
-      console.log('🎵 Created blessed audio element for Safari iOS');
-      
-      // If audio isn't enabled yet but we just unlocked it, auto-enable
-      if (!audioEnabled) {
-        console.log('🔊 Auto-enabling audio after successful unlock');
-        setAudioEnabled(true);
-        localStorage.setItem('audioEnabled', 'true');
-        setShowAudioPrompt(false);
-      }
-    } finally {
-      isAudioUnlockingRef.current = false;
-    }
-  };
-
-  const stopAudio = useCallback(() => {
-    const audio = currentPlayingAudioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      currentPlayingAudioRef.current = null;
-    }
-    setIsAudioPlaying(false);
-  }, []);
-
-  const handleRecordingStart = () => {
-    setIsRecording(true);
-    setRecordingState('recording');
-    setRecordingError(null);
-    console.log('Voice recording started');
-  };
-
-  const handleRecordingError = (error: string) => {
-    console.error('Recording error:', error);
-    setIsRecording(false);
-    setRecordingState('error');
-    setRecordingError(error);
-    setIsProcessing(false);
-  };
-
+  // ─── Event handlers ───────────────────────────────────────────────────────
   const handleTextMessage = async () => {
-    if (!textMessage.trim() || !currentConversationId) return;
-
-    console.log('Sending text message:', textMessage);
+    if (!textMessage.trim() || !conversation.currentConversationId) return;
     setIsProcessing(true);
 
-    const pendingId = `pending-${Date.now()}-${Math.random()}`;
     const messageText = textMessage;
-
-    // Start tracking a pipeline event for transparency (text input, no STT)
     const pipelineId = `pipeline-${Date.now()}`;
-    currentPipelineRef.current = { id: pipelineId, startTime: Date.now(), userMessage: messageText };
-    setPipelineEvents(prev => [...prev, {
-      id: pipelineId,
-      userMessage: messageText,
-      timestamp: new Date().toISOString(),
-      ttsRequested: audioEnabled,
-    }]);
+    transparency.startEvent(pipelineId, messageText, undefined, tts.audioEnabled);
 
     try {
-      // Create user turn and trigger agent response after it's saved
-      createTurn({
-        conversationId: currentConversationId,
+      const pendingId = `pending-${Date.now()}-${Math.random()}`;
+      conversation.createTurn({
+        conversationId: conversation.currentConversationId,
         role: 'user',
         text: messageText,
         triggerAgent: true,
         pendingId,
       });
-      
       setTextMessage('');
     } catch (error) {
-      const errorDetails = {
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined
-      };
-      console.error('Error sending text message:', errorDetails);
+      console.error('Error sending text message:', error);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleRecordingStop = async (audioBlob?: Blob) => {
-    setIsRecording(false);
-    console.log('Voice recording stopped', audioBlob?.size, 'bytes');
-    
-    if (!audioBlob || !currentConversationId) {
-      setRecordingState('idle');
-      return;
-    }
-    
-    // Check if audio blob has data
-    if (audioBlob.size === 0 || audioBlob.size < 100) {
-      console.error('Audio recording is empty or too small:', audioBlob.size, 'bytes');
-      setRecordingError('Recording too short or empty. Please hold the button longer and speak clearly.');
-      setRecordingState('error');
-      return;
-    }
-
-    setRecordingState('processing');
-    setIsProcessing(true);
-    
-    try {
-      // Convert audio to text using STT API
-      const formData = new FormData();
-      // Determine proper file extension based on actual MIME type
-      let fileExtension = 'wav'; // default fallback
-      if (audioBlob.type.includes('webm')) {
-        fileExtension = 'webm';
-      } else if (audioBlob.type.includes('mp4')) {
-        fileExtension = 'm4a'; // Use m4a for mp4 audio, which OpenAI supports better
-      } else if (audioBlob.type.includes('ogg')) {
-        fileExtension = 'ogg';
-      }
-      
-      console.log('Sending audio file:', `recording.${fileExtension}`, 'with type:', audioBlob.type);
-      formData.append('file', audioBlob, `recording.${fileExtension}`);
-
-      const sttResponse = await fetch('/api/stt', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!sttResponse.ok) {
-        const errorText = await sttResponse.text();
-        let errorJson;
-        try { 
-          errorJson = JSON.parse(errorText); 
-        } catch (e) { 
-          // errorText is not JSON, use as is
-        }
-        const errorDetails = {
-          status: sttResponse.status,
-          statusText: sttResponse.statusText,
-          body: errorJson || errorText,
-          headers: Object.fromEntries(sttResponse.headers.entries())
-        };
-        console.error('STT API Error details:', errorDetails);
-        throw new Error(`STT failed: ${sttResponse.status} ${errorJson?.error || errorText}`);
-      }
-
-      const sttResult = await sttResponse.json();
-      const { text } = sttResult;
-      console.log('Transcribed text:', text);
-
-      if (text.trim()) {
-        // Start tracking a pipeline event for transparency
-        const pipelineId = `pipeline-${Date.now()}`;
-        currentPipelineRef.current = { id: pipelineId, startTime: Date.now(), userMessage: text };
-
-        // Capture STT transparency data from the response
-        const sttTransparency = sttResult.transparency;
-        if (sttTransparency) {
-          setPipelineEvents(prev => [...prev, {
-            id: pipelineId,
-            userMessage: text,
-            timestamp: new Date().toISOString(),
-            stt: {
-              processingMs: sttTransparency.sttProcessingMs,
-              audioSizeBytes: sttTransparency.audioSizeBytes,
-              mimeType: sttTransparency.mimeType,
-            },
-            ttsRequested: audioEnabled,
-          }]);
-        }
-
-        const pendingId = `pending-${Date.now()}-${Math.random()}`;
-
-        // Create user turn and trigger agent response after it's saved
-        createTurn({
-          conversationId: currentConversationId,
-          role: 'user',
-          text: text,
-          triggerAgent: true,
-          pendingId,
-        });
-
-        setRecordingState('idle');
-      } else {
-        setRecordingError('No speech detected. Please speak clearly and try again.');
-        setRecordingState('error');
-      }
-    } catch (error) {
-      const errorDetails = {
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined,
-        response: (error as any)?.response,
-        status: (error as any)?.status
-      };
-      console.error('Error processing voice:', errorDetails);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to process recording';
-      setRecordingError(`Processing failed: ${errorMessage}`);
-      setRecordingState('error');
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleStartNewChat = () => {
+    conversation.startNewChat();
+    transparency.clearEvents();
+    setTextMessage('');
+    setShowTextInput(false);
+    setShowVoiceHint(false);
   };
 
-  const playTextAsAudio = async (text: string): Promise<boolean> => {
-    try {
-      // Check if audio is enabled - HTML5 audio doesn't need audioContext
-      if (!audioEnabled) {
-        console.log('🔇 Audio disabled, storing as pending:', text.substring(0, 50) + '...');
-        setPendingAudioText(text);
-        return false;
-      }
-
-      console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
-      
-      // Use a unique URL with query params to enable audio streaming
-      const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison&_t=${Date.now()}`;
-      
-      // Safari iOS workaround: Reuse blessed audio element if available
-      let audio: HTMLAudioElement;
-      if (blessedAudioRef.current) {
-        console.log('🎵 Reusing blessed audio element for Safari iOS');
-        audio = blessedAudioRef.current;
-        audio.src = audioUrl; // Update the source
-      } else {
-        // Fallback: Create new audio element (works on desktop browsers)
-        console.log('🎵 Creating new audio element (desktop or no blessed audio)');
-        audio = new Audio();
-        audio.preload = 'auto';
-        audio.src = audioUrl;
-        (audio as any).playsInline = true;
-      }
-      
-      // Ensure audio is not muted and has proper volume
-      audio.muted = false;
-      audio.volume = 1.0; // Restore full volume (might have been lowered during unlock)
-
-      // Return a promise that resolves when playback starts or fails
-      return new Promise((resolve) => {
-        const cleanup = () => {
-          audio.removeEventListener('canplay', onCanPlay);
-          audio.removeEventListener('error', onError);
-          audio.removeEventListener('ended', onEnded);
-        };
-
-        const onCanPlay = () => {
-          console.log('🎵 Audio canplay event fired, attempting playback...');
-          audio.play()
-            .then(() => {
-              console.log('✓ Audio playback started successfully');
-              currentPlayingAudioRef.current = audio;
-              setIsAudioPlaying(true);
-              resolve(true);
-            })
-            .catch((playError) => {
-              const errorDetails = {
-                message: playError instanceof Error ? playError.message : String(playError),
-                name: playError instanceof Error ? playError.name : 'Unknown',
-                audioEnabled,
-                blessedAudioExists: !!blessedAudioRef.current,
-                audioSrc: audio.src,
-                audioReadyState: audio.readyState
-              };
-              console.error('❌ Audio play failed:', errorDetails);
-              console.error('💡 Hint: If on iOS Safari, make sure audio was unlocked during user gesture');
-              // Store as pending for later manual play
-              setIsAudioPlaying(false);
-              setPendingAudioText(text);
-              cleanup();
-              resolve(false);
-            });
-        };
-
-        const onError = (e: Event) => {
-          const errorDetails = {
-            type: e.type,
-            target: e.target ? 'HTMLAudioElement' : 'Unknown',
-            currentSrc: audio.currentSrc,
-            readyState: audio.readyState,
-            networkState: audio.networkState
-          };
-          console.error('❌ Audio loading error:', errorDetails);
-          setIsAudioPlaying(false);
-          setPendingAudioText(text);
-          cleanup();
-          resolve(false);
-        };
-
-        const onEnded = () => {
-          console.log('✓ Audio playback completed');
-          currentPlayingAudioRef.current = null;
-          setIsAudioPlaying(false);
-          cleanup();
-        };
-
-        audio.addEventListener('canplay', onCanPlay);
-        audio.addEventListener('error', onError);
-        audio.addEventListener('ended', onEnded);
-
-        // Set a timeout in case the audio never loads
-        setTimeout(() => {
-          if (audio.readyState === 0) {
-            console.warn('⚠️ Audio loading timeout');
-            setPendingAudioText(text);
-            cleanup();
-            resolve(false);
-          }
-        }, 5000);
-      });
-      
-    } catch (error) {
-      const errorDetails = {
-        message: error instanceof Error ? error.message : String(error),
-        name: error instanceof Error ? error.name : 'Unknown',
-        stack: error instanceof Error ? error.stack : undefined
-      };
-      console.error('❌ Error in playTextAsAudio:', errorDetails);
-      setPendingAudioText(text);
-      return false;
-    }
+  const handleExportTranscript = () => {
+    const date = new Date();
+    const lines: string[] = [
+      'Agentforce Conversation',
+      `Exported: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      '─'.repeat(40),
+      '',
+    ];
+    conversation.turns.forEach((turn: Turn) => {
+      const speaker = turn.role === 'user' ? 'You' : 'Agentforce';
+      const time = turn.createdAt
+        ? new Date(turn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '';
+      lines.push(`[${speaker}${time ? ` · ${time}` : ''}]`);
+      lines.push(turn.text);
+      lines.push('');
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agentforce-${date.toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
+  const handleFirstRecordingStart = () => {
+    if (showVoiceHint) {
+      setShowVoiceHint(false);
+      localStorage.setItem('voiceHintSeen', '1');
+    }
+    recorder.handleRecordingStart();
+  };
+
+  const saveTitle = (id: string) => {
+    const trimmed = editingTitleValue.trim();
+    const original = conversation.conversations.find((c: Conversation) => c.id === id)?.title;
+    if (trimmed && trimmed !== original) {
+      conversation.updateConversationTitle({ id, title: trimmed });
+    }
+    setEditingTitleId(null);
+  };
+
+  // ─── Ambient voice mode computed values ──────────────────────────────────
+  const isRecording = recorder.recordingState === 'recording';
+  const isSttProcessing = recorder.recordingState === 'processing';
+  const isThinking = agentStream.agentPending || agentStream.isAgentStreaming;
+  const isSpeaking = tts.isAudioPlaying;
+
+
+  const glowHalo = isRecording    ? 'rgba(59,130,246,0.22)'
+    : isSttProcessing ? 'rgba(245,158,11,0.18)'
+    : isThinking      ? 'rgba(168,85,247,0.22)'
+    : isSpeaking      ? 'rgba(34,197,94,0.18)'
+    :                   'rgba(59,130,246,0.10)';
+
+  const [orbInner, orbMid, orbOuter] = isRecording
+    ? ['rgba(59,130,246,0.55)', 'rgba(59,130,246,0.25)', 'rgba(59,130,246,0.08)']
+    : isSttProcessing
+    ? ['rgba(245,158,11,0.50)', 'rgba(245,158,11,0.22)', 'rgba(245,158,11,0.07)']
+    : isThinking
+    ? ['rgba(168,85,247,0.55)', 'rgba(168,85,247,0.25)', 'rgba(168,85,247,0.08)']
+    : isSpeaking
+    ? ['rgba(34,197,94,0.50)', 'rgba(34,197,94,0.22)', 'rgba(34,197,94,0.07)']
+    : ['rgba(59,130,246,0.22)', 'rgba(59,130,246,0.08)', 'rgba(59,130,246,0.02)'];
+  const orbShadow = `0 0 30px 8px ${orbInner}, 0 0 70px 25px ${orbMid}, 0 0 120px 50px ${orbOuter}`;
+
+  const micDropShadow = isRecording
+    ? 'drop-shadow(0 0 14px rgba(59,130,246,0.55))'
+    : isSttProcessing
+    ? 'drop-shadow(0 0 14px rgba(245,158,11,0.50))'
+    : isThinking
+    ? 'drop-shadow(0 0 14px rgba(168,85,247,0.55))'
+    : isSpeaking
+    ? 'drop-shadow(0 0 14px rgba(34,197,94,0.50))'
+    : 'drop-shadow(0 0 10px rgba(59,130,246,0.22))';
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="app-shell">
       {/* Mobile App Header */}
       <header className="app-header" role="banner">
         <div className="flex items-center justify-between px-lg py-md h-14">
           <div className="flex items-center gap-md flex-1">
-            <img 
-              src={agentforceLogo} 
-              alt="Agentforce" 
+            <img
+              src={agentforceLogo}
+              alt="Agentforce"
               className="w-8 h-8 object-contain flex-shrink-0"
               data-testid="img-header-logo"
             />
             <h1 className="text-xl font-semibold text-foreground truncate" data-testid="text-agentforce-title">
               Agentforce
             </h1>
+            {/* Session status badge — only shown when connected to live Agentforce */}
+            {settings && settings.agentforceMode !== 'stub' && (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                conversation.turns.length > 0 || agentStream.isAgentStreaming
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-blue-50 border-blue-200 text-blue-600'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  conversation.turns.length > 0 || agentStream.isAgentStreaming
+                    ? 'bg-emerald-500'
+                    : 'bg-blue-400'
+                }`} />
+                {conversation.turns.length > 0 || agentStream.isAgentStreaming
+                  ? 'Live'
+                  : 'Connected'}
+              </span>
+            )}
           </div>
-          
+
           {/* Header Actions */}
           <div className="flex items-center gap-sm">
             <Drawer open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
@@ -1006,11 +333,10 @@ export default function VoiceChat() {
                     Your recent conversations and chat history
                   </DrawerDescription>
                 </DrawerHeader>
-                
+
                 <div className="px-lg pb-lg overflow-y-auto max-h-[calc(85vh-120px)]">
-                  {conversationsLoading ? (
+                  {conversation.conversationsLoading ? (
                     <div className="space-y-md" aria-busy="true" aria-label="Loading conversations">
-                      {/* Show 6 skeleton conversation cards */}
                       <ConversationSkeleton />
                       <ConversationSkeleton />
                       <ConversationSkeleton />
@@ -1018,15 +344,15 @@ export default function VoiceChat() {
                       <ConversationSkeleton />
                       <ConversationSkeleton />
                     </div>
-                  ) : conversations.length === 0 ? (
+                  ) : conversation.conversations.length === 0 ? (
                     <div className="text-center py-xl" role="status">
                       <History className="w-16 h-16 text-muted-foreground mx-auto mb-lg" aria-hidden="true" />
                       <h3 className="text-xl font-semibold mb-md text-foreground">Ready to chat?</h3>
                       <p className="text-muted-foreground mb-lg max-w-sm mx-auto leading-relaxed">
                         Start a conversation with Agentforce using voice or text. Your chat history will appear here.
                       </p>
-                      <Button 
-                        onClick={() => setIsHistoryOpen(false)} 
+                      <Button
+                        onClick={() => setIsHistoryOpen(false)}
                         className="rounded-full"
                         data-testid="button-start-new-conversation"
                         aria-label="Close history and start new conversation"
@@ -1037,45 +363,43 @@ export default function VoiceChat() {
                     </div>
                   ) : (
                     <div className="space-y-md">
-                      {conversations.map((conversation) => {
-                        const isCurrentConversation = conversation.id === currentConversationId;
-                        const lastActivity = new Date(conversation.createdAt);
-                        
+                      {conversation.conversations.map((conv: Conversation) => {
+                        const isCurrentConversation = conv.id === conversation.currentConversationId;
+                        const lastActivity = new Date(conv.createdAt);
+
                         return (
                           <Card
-                            key={conversation.id}
+                            key={conv.id}
                             className={`group hover-elevate cursor-pointer transition-all duration-200 ${
                               isCurrentConversation ? 'ring-2 ring-primary/20 border-primary/30' : ''
                             }`}
                             onClick={() => {
-                              if (editingTitleId === conversation.id) return;
+                              if (editingTitleId === conv.id) return;
                               if (!isCurrentConversation) {
-                                setCurrentConversationId(conversation.id);
-                                localStorage.setItem('currentConversationId', conversation.id);
-                                queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-                                // Clear transparency events — they belong to the previous session
-                                setPipelineEvents([]);
-                                currentPipelineRef.current = null;
+                                conversation.setCurrentConversationId(conv.id);
+                                localStorage.setItem('currentConversationId', conv.id);
+                                conversation.queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+                                transparency.clearEvents();
                               }
                               setIsHistoryOpen(false);
                             }}
-                            data-testid={`card-conversation-${conversation.id}`}
+                            data-testid={`card-conversation-${conv.id}`}
                           >
                             <CardContent className="p-lg">
                               <div className="flex items-start justify-between gap-md">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-sm mb-sm">
-                                    {editingTitleId === conversation.id ? (
+                                    {editingTitleId === conv.id ? (
                                       <input
                                         value={editingTitleValue}
                                         onChange={(e) => setEditingTitleValue(e.target.value)}
                                         onKeyDown={(e) => {
-                                          if (e.key === 'Enter') saveTitle(conversation.id);
+                                          if (e.key === 'Enter') saveTitle(conv.id);
                                           if (e.key === 'Escape') setEditingTitleId(null);
                                           e.stopPropagation();
                                         }}
                                         onClick={(e) => e.stopPropagation()}
-                                        onBlur={() => saveTitle(conversation.id)}
+                                        onBlur={() => saveTitle(conv.id)}
                                         autoFocus
                                         className="flex-1 min-w-0 text-sm font-medium bg-transparent border-b border-primary outline-none py-0.5 text-foreground w-full"
                                         aria-label="Edit conversation title"
@@ -1083,13 +407,13 @@ export default function VoiceChat() {
                                     ) : (
                                       <>
                                         <h4 className="font-medium text-foreground truncate flex-1 min-w-0">
-                                          {conversation.title}
+                                          {conv.title}
                                         </h4>
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setEditingTitleId(conversation.id);
-                                            setEditingTitleValue(conversation.title);
+                                            setEditingTitleId(conv.id);
+                                            setEditingTitleValue(conv.title);
                                           }}
                                           className="opacity-0 group-hover:opacity-100 focus:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-muted flex-shrink-0 transition-opacity"
                                           aria-label="Edit conversation title"
@@ -1105,7 +429,7 @@ export default function VoiceChat() {
                                       </Badge>
                                     )}
                                   </div>
-                                  
+
                                   <div className="flex items-center gap-md text-xs text-muted-foreground">
                                     <div className="flex items-center gap-xs">
                                       <Clock className="w-3 h-3" />
@@ -1115,7 +439,7 @@ export default function VoiceChat() {
                                     </div>
                                     <div className="flex items-center gap-xs">
                                       <MessageCircle className="w-3 h-3" />
-                                      <span>{conversation.status}</span>
+                                      <span>{conv.status}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1129,29 +453,43 @@ export default function VoiceChat() {
                 </div>
               </DrawerContent>
             </Drawer>
-            
-            {turns.length > 0 && (
+
+            <Button
+              size="icon"
+              variant="ghost"
+              className="touch-target w-11 h-11 rounded-full"
+              onClick={handleStartNewChat}
+              data-testid="button-new-chat"
+              title="New conversation"
+              aria-label="Start new conversation"
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
+
+            {conversation.turns.length > 0 && (
               <Button
                 size="icon"
                 variant="ghost"
                 className="touch-target w-11 h-11 rounded-full"
-                onClick={startNewChat}
-                data-testid="button-new-chat"
+                onClick={handleExportTranscript}
+                data-testid="button-export-transcript"
+                title="Download transcript"
+                aria-label="Download conversation transcript"
               >
-                <Plus className="w-5 h-5" />
+                <Download className="w-5 h-5" />
               </Button>
             )}
-            
+
             {/* Audio Toggle Button */}
             <Button
               size="icon"
               variant="ghost"
               className="touch-target w-11 h-11 rounded-full"
-              onClick={() => audioEnabled ? disableAudio() : initializeAudio()}
-              data-testid={`button-audio-${audioEnabled ? 'enabled' : 'disabled'}`}
-              title={audioEnabled ? 'Disable voice responses' : 'Enable voice responses'}
+              onClick={() => tts.audioEnabled ? tts.disableAudio() : tts.initializeAudio()}
+              data-testid={`button-audio-${tts.audioEnabled ? 'enabled' : 'disabled'}`}
+              title={tts.audioEnabled ? 'Disable voice responses' : 'Enable voice responses'}
             >
-              {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              {tts.audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
             </Button>
 
             {/* Transparency Panel Toggle */}
@@ -1169,7 +507,7 @@ export default function VoiceChat() {
             >
               <Zap className="w-5 h-5" />
             </Button>
-            
+
             <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -1188,7 +526,7 @@ export default function VoiceChat() {
                     Customize your voice chat experience
                   </SheetDescription>
                 </SheetHeader>
-                
+
                 <div className="space-y-6 mt-6">
                   <div className="flex items-center justify-between space-x-4">
                     <Label htmlFor="show-conversation" className="flex flex-col space-y-1">
@@ -1207,7 +545,6 @@ export default function VoiceChat() {
                       data-testid="toggle-conversation"
                     />
                   </div>
-
                 </div>
               </SheetContent>
             </Sheet>
@@ -1222,30 +559,38 @@ export default function VoiceChat() {
       <main
         ref={(el) => { scrollContainerRef.current = el; }}
         onScroll={handleScroll}
-        className={`app-content relative flex-1 transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''}`}
+        className={`app-content relative flex-1 transition-all duration-700 ${showTransparency ? 'md:pr-80' : ''}`}
         role="main"
         aria-label="Chat conversation"
       >
+        <AnimatePresence mode="wait">
         {showConversation ? (
           // Conversation Mode
-          <div className="px-lg py-lg space-y-lg h-full">
+          <motion.div
+            key="conversation"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="px-lg py-lg space-y-lg h-full"
+          >
           {/* Screen reader live region for chat updates */}
           <div className="sr-only" aria-live="polite" id="chat-announcements"></div>
-          
+
           {/* Audio Enable Prompt */}
-          {showAudioPrompt && !isValidatingConversation && (
+          {tts.showAudioPrompt && !conversation.isValidatingConversation && (
             <div className="audio-prompt-container">
               <Card className="border-primary/20 bg-primary/5">
                 <CardContent className="p-lg text-center">
                   <Volume2 className="w-12 h-12 text-primary mx-auto mb-md" />
                   <h3 className="text-lg font-semibold text-foreground mb-sm">Enable Voice Responses?</h3>
                   <p className="text-sm text-muted-foreground mb-lg max-w-md mx-auto leading-relaxed">
-                    Agentforce can speak its responses aloud for a more natural conversation experience. 
+                    Agentforce can speak its responses aloud for a more natural conversation experience.
                     This requires your permission to play audio.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-sm justify-center">
                     <Button
-                      onClick={initializeAudio}
+                      onClick={tts.initializeAudio}
                       className="rounded-full"
                       data-testid="button-enable-audio"
                     >
@@ -1255,7 +600,7 @@ export default function VoiceChat() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setShowAudioPrompt(false);
+                        tts.setShowAudioPrompt(false);
                         localStorage.setItem('audioEnabled', 'false');
                       }}
                       className="rounded-full"
@@ -1269,9 +614,9 @@ export default function VoiceChat() {
               </Card>
             </div>
           )}
-          
+
           {/* Pending Audio Notification */}
-          {pendingAudioText && !showAudioPrompt && (
+          {tts.pendingAudioText && !tts.showAudioPrompt && (
             <div className="pending-audio-container">
               <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
                 <CardContent className="p-lg">
@@ -1288,11 +633,7 @@ export default function VoiceChat() {
                     <div className="flex items-center gap-sm">
                       <Button
                         size="sm"
-                        onClick={() => {
-                          if (pendingAudioText) {
-                            initializeAudio();
-                          }
-                        }}
+                        onClick={() => { if (tts.pendingAudioText) tts.initializeAudio(); }}
                         className="rounded-full bg-orange-600 hover:bg-orange-700 text-white"
                         data-testid="button-play-pending-audio"
                       >
@@ -1302,7 +643,7 @@ export default function VoiceChat() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setPendingAudioText(null)}
+                        onClick={() => tts.setPendingAudioText(null)}
                         className="rounded-full border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900"
                         data-testid="button-dismiss-pending-audio"
                       >
@@ -1314,38 +655,40 @@ export default function VoiceChat() {
               </Card>
             </div>
           )}
-          
+
           {/* Welcome State */}
-          {turns.length === 0 && !turnsLoading && !isValidatingConversation && (
-            <div className="flex flex-col items-center justify-center h-full text-center px-xl">
+          {conversation.turns.length === 0 && !conversation.turnsLoading && !conversation.isValidatingConversation && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-xl select-none">
               <div className="mb-2xl">
-                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-xl mx-auto">
-                  <img 
-                    src={agentforceLogo} 
-                    alt="Agentforce" 
-                    className="w-12 h-12 object-contain"
-                    data-testid="img-agentforce-logo"
-                  />
+                {/* Orb with blur halo — matches voice mode visual language */}
+                <div className="relative w-fit mx-auto mb-xl">
+                  <div className="absolute -inset-8 rounded-full blur-2xl bg-blue-400/15" />
+                  <div className="relative w-32 h-32 rounded-full bg-blue-50 border border-blue-100/80 flex items-center justify-center shadow-sm">
+                    <img
+                      src={agentforceLogo}
+                      alt="Agentforce"
+                      className="w-20 h-20 object-contain"
+                      data-testid="img-agentforce-logo"
+                    />
+                  </div>
                 </div>
-                <h2 className="text-2xl font-semibold text-foreground mb-md" data-testid="text-main-title">
+                <h2 className="text-xl font-semibold text-foreground mb-sm" data-testid="text-main-title">
                   Talk to Agentforce
                 </h2>
-                <p className="text-base text-muted-foreground leading-relaxed max-w-sm" data-testid="text-instructions">
-                  Tap the mic button to start recording. Tap again to send.
+                <p className="text-sm text-muted-foreground" data-testid="text-instructions">
+                  Tap the mic to begin
                 </p>
               </div>
             </div>
           )}
 
           {/* Connection State with Skeleton Messages */}
-          {isValidatingConversation && (
+          {conversation.isValidatingConversation && (
             <div className="flex flex-col h-full">
               <div className="flex items-center justify-center py-lg">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" aria-hidden="true" />
                 <span className="ml-md text-base text-muted-foreground">Connecting...</span>
               </div>
-              
-              {/* Skeleton message bubbles to show loading conversation */}
               <div className="flex-1 overflow-y-auto" aria-busy="true" aria-label="Loading conversation messages">
                 <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={false} />
                 <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={true} />
@@ -1360,9 +703,8 @@ export default function VoiceChat() {
           )}
 
           {/* Messages */}
-          {turnsLoading && !isValidatingConversation ? (
+          {conversation.turnsLoading && !conversation.isValidatingConversation ? (
             <div className="pb-lg" aria-busy="true" aria-label="Loading messages">
-              {/* Skeleton messages while loading */}
               <MessageSkeleton isUser={false} isFirstInGroup={true} isLastInGroup={true} />
               <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={false} />
               <MessageSkeleton isUser={true} isFirstInGroup={false} isLastInGroup={true} />
@@ -1370,13 +712,13 @@ export default function VoiceChat() {
               <MessageSkeleton isUser={false} isFirstInGroup={false} isLastInGroup={true} />
               <MessageSkeleton isUser={true} isFirstInGroup={true} isLastInGroup={true} />
             </div>
-          ) : turns.length > 0 && (
-            <div className="pb-lg" aria-busy={agentPending || isAgentStreaming} aria-live="polite">
-              {/* Render saved messages */}
-              {turns.map((turn, index) => {
-                const previousTurn = index > 0 ? turns[index - 1] : null;
-                const nextTurn = index < turns.length - 1 ? turns[index + 1] : null;
-                
+          ) : conversation.turns.length > 0 && (
+            <div className="pb-lg" aria-busy={agentStream.agentPending || agentStream.isAgentStreaming} aria-live="polite">
+              {/* Saved messages */}
+              {conversation.turns.map((turn: Turn, index: number) => {
+                const previousTurn = index > 0 ? conversation.turns[index - 1] : null;
+                const nextTurn = index < conversation.turns.length - 1 ? conversation.turns[index + 1] : null;
+
                 const isGroupedWithPrevious = shouldGroupMessage(
                   { role: turn.role, createdAt: toSafeISOString(turn.createdAt) },
                   previousTurn ? { role: previousTurn.role, createdAt: toSafeISOString(previousTurn.createdAt) } : null
@@ -1385,14 +727,11 @@ export default function VoiceChat() {
                   { role: nextTurn.role, createdAt: toSafeISOString(nextTurn.createdAt) },
                   { role: turn.role, createdAt: toSafeISOString(turn.createdAt) }
                 ) : false;
-                
-                const isFirstInGroup = !isGroupedWithPrevious;
-                const isLastInGroup = !isGroupedWithNext;
-                
+
                 const isLastAgentTurn =
                   turn.role === 'assistant' &&
-                  index === turns.length - 1 &&
-                  !isAgentStreaming;
+                  index === conversation.turns.length - 1 &&
+                  !agentStream.isAgentStreaming;
 
                 return (
                   <MessageBubble
@@ -1400,25 +739,24 @@ export default function VoiceChat() {
                     message={turn.text}
                     isUser={turn.role === 'user'}
                     timestamp={toSafeDate(turn.createdAt)}
-                    isFirstInGroup={isFirstInGroup}
-                    isLastInGroup={isLastInGroup}
+                    isFirstInGroup={!isGroupedWithPrevious}
+                    isLastInGroup={!isGroupedWithNext}
                     showAvatar={true}
                     showTimestamp={true}
                     messageState="sent"
-                    isPlaying={isAudioPlaying && isLastAgentTurn}
+                    isPlaying={tts.isAudioPlaying && isLastAgentTurn}
                   />
                 );
               })}
-              
-              {/* Render pending messages */}
-              {Array.from(pendingMessages.entries()).map(([pendingId, pendingMessage]) => {
-                const lastTurn = turns[turns.length - 1];
-                
+
+              {/* Pending messages */}
+              {[...conversation.pendingMessages.entries()].map(([pendingId, pendingMessage]) => {
+                const lastTurn = conversation.turns[conversation.turns.length - 1];
                 const isGroupedWithPrevious = lastTurn ? shouldGroupMessage(
                   { role: 'user', createdAt: toSafeISOString(pendingMessage.timestamp) },
                   { role: lastTurn.role, createdAt: toSafeISOString(lastTurn.createdAt) }
                 ) : false;
-                
+
                 return (
                   <MessageBubble
                     key={pendingId}
@@ -1430,16 +768,16 @@ export default function VoiceChat() {
                     showAvatar={true}
                     showTimestamp={true}
                     messageState={pendingMessage.state}
-                    onRetry={pendingMessage.state === 'error' ? () => retryMessage(pendingId) : undefined}
+                    onRetry={pendingMessage.state === 'error' ? () => conversation.retryMessage(pendingId) : undefined}
                   />
                 );
               })}
-              
+
               {/* Agent streaming text or typing indicator */}
-              {isAgentStreaming && streamingText ? (
+              {agentStream.isAgentStreaming && agentStream.streamingText ? (
                 <div aria-busy="true" aria-live="polite" role="status" aria-label="Agent is responding">
                   <MessageBubble
-                    message={streamingText + '▌'}
+                    message={agentStream.streamingText + '▌'}
                     isUser={false}
                     isTyping={false}
                     isFirstInGroup={true}
@@ -1447,10 +785,10 @@ export default function VoiceChat() {
                     showAvatar={true}
                     showTimestamp={false}
                     messageState="sent"
-                    isPlaying={isAudioPlaying}
+                    isPlaying={tts.isAudioPlaying}
                   />
                 </div>
-              ) : (agentPending || isAgentStreaming) && (
+              ) : (agentStream.agentPending || agentStream.isAgentStreaming) && (
                 <div aria-busy="true" aria-live="polite" role="status" aria-label="Agent is responding">
                   <MessageBubble
                     message=""
@@ -1465,96 +803,143 @@ export default function VoiceChat() {
               )}
             </div>
           )}
-          
+
           <div ref={messagesEndRef} />
-          </div>
+          </motion.div>
         ) : (
-          // Voice-Only Mode  
-          <div className="flex-1 grid place-items-center px-lg py-xl">
-            <div className="flex flex-col items-center gap-8 text-center" data-testid="voice-center">
-              {/* Agentforce Logo with Animation */}
-              <div className={`relative transition-transform duration-300 ${
-                recordingState === 'recording' ? 'scale-110' :
-                recordingState === 'processing' ? 'scale-105' :
-                (agentPending || isAgentStreaming) ? 'scale-105' :
-                isAudioPlaying ? 'scale-105' :
-                'scale-100'
-              }`}>
-                {/* Ripple Rings — Listening (blue) */}
-                {recordingState === 'recording' && (
-                  <>
-                    <div className="absolute inset-0 rounded-full border-2 border-blue-500/30 animate-ping" />
-                    <div className="absolute inset-0 rounded-full border-2 border-blue-400/20 animate-ping" style={{ animationDelay: '0.5s' }} />
-                    <div className="absolute inset-0 rounded-full border-2 border-blue-300/10 animate-ping" style={{ animationDelay: '1s' }} />
-                  </>
-                )}
+          // Voice-Only Mode — Ambient Canvas
+          <motion.div
+            key="voice"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col items-center justify-center h-full gap-10 select-none pt-16"
+            data-testid="voice-center"
+          >
 
-                {/* Ripple Rings — Processing (amber) */}
-                {recordingState === 'processing' && (
-                  <>
-                    <div className="absolute inset-0 rounded-full border-2 border-amber-500/30 animate-ping" />
-                    <div className="absolute inset-0 rounded-full border-2 border-amber-400/20 animate-ping" style={{ animationDelay: '0.4s' }} />
-                    <div className="absolute inset-0 rounded-full border-2 border-amber-300/10 animate-ping" style={{ animationDelay: '0.8s' }} />
-                  </>
-                )}
+            {/* ── Ambient Orb ── */}
+            <div className={`relative animate-orb-glow transition-transform duration-500 ${
+              isRecording || isThinking || isSpeaking ? 'scale-110' :
+              isSttProcessing ? 'scale-105' : 'scale-100'
+            }`}>
+              {/* Blur halo behind orb */}
+              <div
+                className="absolute -inset-10 rounded-full blur-3xl transition-all duration-700"
+                style={{ background: glowHalo }}
+              />
 
-                {/* Ripple Rings — Agent Thinking / Streaming (purple) */}
-                {(agentPending || isAgentStreaming) && (
-                  <>
-                    <div className="absolute inset-0 rounded-full border-2 border-purple-500/30 animate-ping" />
-                    <div className="absolute inset-0 rounded-full border-2 border-purple-400/20 animate-ping" style={{ animationDelay: '0.3s' }} />
-                    <div className="absolute inset-0 rounded-full border-2 border-purple-300/10 animate-ping" style={{ animationDelay: '0.6s' }} />
-                  </>
-                )}
+              {/* Ping rings — Listening (blue) */}
+              {isRecording && <>
+                <div className="absolute -inset-4 rounded-full border-4 border-blue-500/40 animate-ping" />
+                <div className="absolute -inset-4 rounded-full border-4 border-blue-400/25 animate-ping" style={{ animationDelay: '0.5s' }} />
+                <div className="absolute -inset-4 rounded-full border-4 border-blue-300/15 animate-ping" style={{ animationDelay: '1s' }} />
+              </>}
 
-                {/* Ripple Rings — Agent Speaking (green) */}
-                {isAudioPlaying && (
-                  <>
-                    <div className="absolute inset-0 rounded-full border-2 border-green-500/30 animate-ping" />
-                    <div className="absolute inset-0 rounded-full border-2 border-green-400/20 animate-ping" style={{ animationDelay: '0.4s' }} />
-                    <div className="absolute inset-0 rounded-full border-2 border-green-300/10 animate-ping" style={{ animationDelay: '0.8s' }} />
-                  </>
-                )}
+              {/* Ping rings — STT Processing (amber) */}
+              {isSttProcessing && <>
+                <div className="absolute -inset-4 rounded-full border-4 border-amber-500/40 animate-ping" />
+                <div className="absolute -inset-4 rounded-full border-4 border-amber-400/25 animate-ping" style={{ animationDelay: '0.4s' }} />
+                <div className="absolute -inset-4 rounded-full border-4 border-amber-300/15 animate-ping" style={{ animationDelay: '0.8s' }} />
+              </>}
 
-                {/* Logo Container — bg tints with state */}
-                <div className={`w-32 h-32 rounded-full flex items-center justify-center relative overflow-hidden transition-colors duration-500 ${
-                  recordingState === 'recording' ? 'bg-blue-500/10' :
-                  recordingState === 'processing' ? 'bg-amber-500/10' :
-                  (agentPending || isAgentStreaming) ? 'bg-purple-500/10' :
-                  isAudioPlaying ? 'bg-green-500/10' :
-                  'bg-primary/10'
-                }`}>
-                  <img
-                    src={agentforceLogo}
-                    alt="Agentforce"
-                    className="w-20 h-20 object-contain"
-                    data-testid="voice-mode-logo"
-                  />
-                </div>
-              </div>
+              {/* Ping rings — Agent Thinking (purple) */}
+              {isThinking && <>
+                <div className="absolute -inset-4 rounded-full border-4 border-purple-500/40 animate-ping" />
+                <div className="absolute -inset-4 rounded-full border-4 border-purple-400/25 animate-ping" style={{ animationDelay: '0.3s' }} />
+                <div className="absolute -inset-4 rounded-full border-4 border-purple-300/15 animate-ping" style={{ animationDelay: '0.6s' }} />
+              </>}
 
-              {/* Status Text — color-coded to match active state */}
-              <div className="space-y-2">
-                <h2 className="text-xl font-semibold text-foreground">Voice Mode</h2>
-                <p className={`text-sm max-w-sm transition-colors duration-300 ${
-                  recordingState === 'recording' ? 'text-blue-500' :
-                  recordingState === 'processing' ? 'text-amber-500' :
-                  (agentPending || isAgentStreaming) ? 'text-purple-500' :
-                  isAudioPlaying ? 'text-green-500' :
-                  'text-muted-foreground'
-                }`}>
-                  {recordingState === 'recording' ? 'Listening...' :
-                   recordingState === 'processing' ? 'Processing your message...' :
-                   (agentPending || isAgentStreaming) ? (streamingText ? 'Agent is responding...' : 'Thinking...') :
-                   isAudioPlaying ? 'Agent is speaking...' :
-                   'Tap the mic to start'}
-                </p>
+              {/* Ping rings — Agent Speaking (emerald) */}
+              {isSpeaking && <>
+                <div className="absolute -inset-4 rounded-full border-4 border-emerald-500/40 animate-ping" />
+                <div className="absolute -inset-4 rounded-full border-4 border-emerald-400/25 animate-ping" style={{ animationDelay: '0.4s' }} />
+                <div className="absolute -inset-4 rounded-full border-4 border-emerald-300/15 animate-ping" style={{ animationDelay: '0.8s' }} />
+              </>}
+
+              {/* Orb — glowing box-shadow + dark tinted interior */}
+              <div
+                className="relative w-48 h-48 rounded-full flex items-center justify-center transition-all duration-700"
+                style={{ boxShadow: orbShadow }}
+              >
+                {/* State-tinted inner background */}
+                <div className={`absolute inset-0 rounded-full transition-all duration-700 ${
+                  isRecording    ? 'bg-blue-100/70' :
+                  isSttProcessing ? 'bg-amber-100/60' :
+                  isThinking     ? 'bg-purple-100/65' :
+                  isSpeaking     ? 'bg-emerald-100/60' :
+                                   'bg-blue-50/50'
+                }`} />
+                {/* Subtle ring edge */}
+                <div className="absolute inset-0 rounded-full border border-gray-200/60" />
+                <img
+                  src={agentforceLogo}
+                  alt="Agentforce"
+                  className="relative w-28 h-28 object-contain z-10"
+                  data-testid="voice-mode-logo"
+                />
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Jump to latest — absolute overlay, appears when user scrolls up in conversation */}
+            {/* ── Live waveform bars (recording or speaking) ── */}
+            <div className={`transition-all duration-300 ${
+              isRecording || isSpeaking ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
+            }`}>
+              <AudioVisualizer
+                isActive={isRecording || isSpeaking}
+                height={72}
+                barClassName={isRecording ? 'bg-blue-500' : 'bg-emerald-500'}
+              />
+            </div>
+
+            {/* ── Status text ── */}
+            <div className="text-center space-y-2">
+              <p className={`text-2xl font-light tracking-wide transition-colors duration-500 ${
+                isRecording    ? 'text-blue-600' :
+                isSttProcessing ? 'text-amber-600' :
+                isThinking     ? 'text-purple-600' :
+                isSpeaking     ? 'text-emerald-600' :
+                                 'text-gray-400'
+              }`}>
+                {isRecording    ? 'Listening...' :
+                 isSttProcessing ? 'Processing...' :
+                 isThinking     ? (agentStream.streamingText ? 'Responding...' : 'Thinking...') :
+                 isSpeaking     ? 'Speaking...' :
+                                  'Ready'}
+              </p>
+              {!isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
+                <p className="text-sm text-gray-300">Tap the mic to start</p>
+              )}
+              <AnimatePresence>
+                {showVoiceHint && !isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
+                  <motion.p
+                    key="voice-hint"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.4 }}
+                    className="text-xs text-gray-300 mt-1"
+                  >
+                    Tap the mic button to begin
+                  </motion.p>
+                )}
+              </AnimatePresence>
+              {conversation.turns.length > 0 && !isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
+                <button
+                  onClick={handleStartNewChat}
+                  className="text-xs text-gray-300 hover:text-gray-500 transition-colors duration-200 mt-2"
+                  aria-label="Start a new conversation"
+                >
+                  + New conversation
+                </button>
+              )}
+            </div>
+
+          </motion.div>
+        )}
+        </AnimatePresence>
+
+        {/* Jump to latest */}
         {showScrollButton && showConversation && (
           <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none z-10">
             <Button
@@ -1577,11 +962,10 @@ export default function VoiceChat() {
       </div>
 
       {/* Voice Composer */}
-      <footer className={`app-footer transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''}`}>
+      <footer className={`app-footer transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''} ${!showConversation ? '!border-t-0 !bg-transparent !backdrop-blur-none' : ''} ${showConversation && conversation.turns.length === 0 ? '!border-t-0' : ''}`}>
         <div className="px-lg pt-lg pb-lg keyboard-aware">
-          {/* Unified Composer Layout */}
           <div className="flex flex-col gap-lg">
-            {/* Text Input Field - Show when expanded */}
+            {/* Text Input Field */}
             {showTextInput && (
               <div className="transition-all duration-300 ease-in-out">
                 <div className="flex gap-md items-end">
@@ -1595,14 +979,14 @@ export default function VoiceChat() {
                         handleTextMessage();
                       }
                     }}
-                    disabled={isProcessing || recordingState === 'processing'}
+                    disabled={isProcessing || recorder.recordingState === 'processing'}
                     className="flex-1 h-12 rounded-full px-lg text-base touch-target"
                     data-testid="input-text-message"
                     aria-label="Type your message"
                   />
                   <Button
                     onClick={handleTextMessage}
-                    disabled={isProcessing || recordingState === 'processing' || !textMessage.trim()}
+                    disabled={isProcessing || recorder.recordingState === 'processing' || !textMessage.trim()}
                     size="icon"
                     className="touch-target w-12 h-12 rounded-full hover-elevate active-elevate-2"
                     data-testid="button-send-text"
@@ -1622,11 +1006,11 @@ export default function VoiceChat() {
             {/* Voice Interface */}
             <div className="flex flex-col items-center gap-lg">
               {/* Stop Speaking — shown when TTS audio is active */}
-              {isAudioPlaying && (
+              {tts.isAudioPlaying && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={stopAudio}
+                  onClick={tts.stopAudio}
                   className="rounded-full h-9 px-lg text-sm text-green-600 dark:text-green-400 border-green-500/40 hover:bg-green-500/10 gap-sm"
                   aria-label="Stop speaking"
                 >
@@ -1635,22 +1019,23 @@ export default function VoiceChat() {
                 </Button>
               )}
 
-              <div aria-busy={recordingState === 'processing'} role="group" aria-label="Voice recording">
+              <div
+                style={!showConversation ? { filter: micDropShadow, transition: 'filter 0.7s ease' } : undefined}
+                aria-busy={recorder.recordingState === 'processing'} role="group" aria-label="Voice recording"
+              >
                 <VoiceRecordButton
-                  onBeforeRecording={unlockAudioForSafari}
-                  onRecordingStart={handleRecordingStart}
-                  onRecordingStop={handleRecordingStop}
-                  onError={handleRecordingError}
-                  disabled={isValidatingConversation}
-                  state={recordingState}
-                  error={recordingError || undefined}
-                  onRetry={() => {
-                    setRecordingError(null);
-                    setRecordingState('idle');
-                  }}
+                  onBeforeRecording={async () => { tts.stopAudio(); await tts.unlockAudioForSafari(); }}
+                  onRecordingStart={handleFirstRecordingStart}
+                  onRecordingStop={recorder.handleRecordingStop}
+                  onError={recorder.handleRecordingError}
+                  disabled={conversation.isValidatingConversation}
+                  state={recorder.recordingState}
+                  error={recorder.recordingError || undefined}
+                  onRetry={recorder.resetError}
+                  showStatusText={showConversation}
                 />
                 {/* Processing indicator - Only show in conversation mode */}
-                {recordingState === 'processing' && showConversation && (
+                {recorder.recordingState === 'processing' && showConversation && (
                   <div className="text-center mt-sm" role="status" aria-live="polite">
                     <div className="flex items-center justify-center gap-sm text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -1662,25 +1047,29 @@ export default function VoiceChat() {
 
               {/* Text Input Toggle */}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setShowTextInput(!showTextInput)}
-                className="touch-target h-11 px-lg rounded-full text-sm text-muted-foreground hover-elevate transition-all duration-200"
+                className={`touch-target h-9 px-md rounded-full text-xs transition-all duration-200 ${
+                  !showConversation
+                    ? 'border-gray-200 text-gray-400 bg-transparent hover:border-gray-300 hover:text-gray-600 hover:bg-transparent'
+                    : 'text-muted-foreground'
+                }`}
                 data-testid="button-toggle-text-input"
                 aria-label={showTextInput ? 'Hide text input' : 'Show text input'}
                 aria-expanded={showTextInput}
               >
-                <MessageCircle className="w-4 h-4 mr-sm" aria-hidden="true" />
-                {showTextInput ? 'Hide' : 'Show'} Text Input
+                <Pencil className="w-3 h-3 mr-1.5" aria-hidden="true" />
+                {showTextInput ? 'Hide keyboard' : 'Type instead'}
               </Button>
             </div>
           </div>
         </div>
       </footer>
 
-      {/* Agent Transparency Panel — rendered outside flex wrapper to avoid overflow clipping */}
+      {/* Agent Transparency Panel */}
       <AgentTransparencyPanel
-        events={pipelineEvents}
+        events={transparency.pipelineEvents}
         isVisible={showTransparency}
         onToggle={() => {
           setShowTransparency(false);

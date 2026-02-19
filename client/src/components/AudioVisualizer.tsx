@@ -4,9 +4,10 @@ interface AudioVisualizerProps {
   isActive: boolean;
   stream?: MediaStream | null;
   height?: number;
+  barClassName?: string;
 }
 
-export default function AudioVisualizer({ isActive, stream, height = 40 }: AudioVisualizerProps) {
+export default function AudioVisualizer({ isActive, stream, height = 40, barClassName = 'bg-recording-active' }: AudioVisualizerProps) {
   const [bars, setBars] = useState<number[]>(Array(12).fill(0));
   const animFrameRef = useRef<number | null>(null);
 
@@ -71,7 +72,7 @@ export default function AudioVisualizer({ isActive, stream, height = 40 }: Audio
       {bars.map((bar, index) => (
         <div
           key={index}
-          className="bg-recording-active rounded-full transition-all duration-75 ease-out min-h-1"
+          className={`${barClassName} rounded-full transition-all duration-75 ease-out min-h-1`}
           style={{
             height: `${Math.max(4, (bar / 100) * height)}px`,
             width: '3px',
