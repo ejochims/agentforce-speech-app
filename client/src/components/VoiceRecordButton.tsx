@@ -342,7 +342,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       {/* Audio Visualizer - Show during recording */}
       {state === 'recording' && (
         <div className="transition-all duration-300" role="img" aria-label="Audio visualization showing voice input levels">
-          <AudioVisualizer isActive={true} stream={liveStream} height={32} />
+          <AudioVisualizer isActive={true} stream={liveStream} height={56} />
         </div>
       )}
       

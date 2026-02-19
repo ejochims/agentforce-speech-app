@@ -30,7 +30,6 @@ import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
 import AgentTransparencyPanel from './AgentTransparencyPanel';
-import AudioVisualizer from './AudioVisualizer';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useAudioRecorder, type SttTransparency } from '@/hooks/useAudioRecorder';
 import { useAgentStream } from '@/hooks/useAgentStream';
@@ -250,22 +249,17 @@ export default function VoiceChat() {
   const isSpeaking = tts.isAudioPlaying;
 
 
-  const glowHalo = isRecording    ? 'rgba(59,130,246,0.22)'
-    : isSttProcessing ? 'rgba(245,158,11,0.18)'
-    : isThinking      ? 'rgba(168,85,247,0.22)'
-    : isSpeaking      ? 'rgba(34,197,94,0.18)'
-    :                   'rgba(59,130,246,0.10)';
+  const glowHalo = isRecording    ? 'rgba(59,130,246,0.40)'
+    : isSttProcessing ? 'rgba(245,158,11,0.35)'
+    : isThinking      ? 'rgba(168,85,247,0.40)'
+    : isSpeaking      ? 'rgba(34,197,94,0.35)'
+    :                   'rgba(59,130,246,0.18)';
 
-  const [orbInner, orbMid, orbOuter] = isRecording
-    ? ['rgba(59,130,246,0.55)', 'rgba(59,130,246,0.25)', 'rgba(59,130,246,0.08)']
-    : isSttProcessing
-    ? ['rgba(245,158,11,0.50)', 'rgba(245,158,11,0.22)', 'rgba(245,158,11,0.07)']
-    : isThinking
-    ? ['rgba(168,85,247,0.55)', 'rgba(168,85,247,0.25)', 'rgba(168,85,247,0.08)']
-    : isSpeaking
-    ? ['rgba(34,197,94,0.50)', 'rgba(34,197,94,0.22)', 'rgba(34,197,94,0.07)']
-    : ['rgba(59,130,246,0.22)', 'rgba(59,130,246,0.08)', 'rgba(59,130,246,0.02)'];
-  const orbShadow = `0 0 30px 8px ${orbInner}, 0 0 70px 25px ${orbMid}, 0 0 120px 50px ${orbOuter}`;
+  const glowHaloOuter = isRecording    ? 'rgba(59,130,246,0.15)'
+    : isSttProcessing ? 'rgba(245,158,11,0.12)'
+    : isThinking      ? 'rgba(168,85,247,0.15)'
+    : isSpeaking      ? 'rgba(34,197,94,0.12)'
+    :                   'rgba(59,130,246,0.06)';
 
   const micDropShadow = isRecording
     ? 'drop-shadow(0 0 14px rgba(59,130,246,0.55))'
@@ -816,6 +810,10 @@ export default function VoiceChat() {
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col items-center justify-center h-full gap-10 select-none pt-16"
             data-testid="voice-center"
+            style={{
+              background: `radial-gradient(circle 280px at 50% 30%, ${glowHalo} 0%, ${glowHaloOuter} 55%, transparent 80%)`,
+              transition: 'background 0.7s ease',
+            }}
           >
 
             {/* ── Ambient Orb ── */}
@@ -823,44 +821,9 @@ export default function VoiceChat() {
               isRecording || isThinking || isSpeaking ? 'scale-110' :
               isSttProcessing ? 'scale-105' : 'scale-100'
             }`}>
-              {/* Blur halo behind orb */}
-              <div
-                className="absolute -inset-10 rounded-full blur-3xl transition-all duration-700"
-                style={{ background: glowHalo }}
-              />
-
-              {/* Ping rings — Listening (blue) */}
-              {isRecording && <>
-                <div className="absolute -inset-4 rounded-full border-4 border-blue-500/40 animate-ping" />
-                <div className="absolute -inset-4 rounded-full border-4 border-blue-400/25 animate-ping" style={{ animationDelay: '0.5s' }} />
-                <div className="absolute -inset-4 rounded-full border-4 border-blue-300/15 animate-ping" style={{ animationDelay: '1s' }} />
-              </>}
-
-              {/* Ping rings — STT Processing (amber) */}
-              {isSttProcessing && <>
-                <div className="absolute -inset-4 rounded-full border-4 border-amber-500/40 animate-ping" />
-                <div className="absolute -inset-4 rounded-full border-4 border-amber-400/25 animate-ping" style={{ animationDelay: '0.4s' }} />
-                <div className="absolute -inset-4 rounded-full border-4 border-amber-300/15 animate-ping" style={{ animationDelay: '0.8s' }} />
-              </>}
-
-              {/* Ping rings — Agent Thinking (purple) */}
-              {isThinking && <>
-                <div className="absolute -inset-4 rounded-full border-4 border-purple-500/40 animate-ping" />
-                <div className="absolute -inset-4 rounded-full border-4 border-purple-400/25 animate-ping" style={{ animationDelay: '0.3s' }} />
-                <div className="absolute -inset-4 rounded-full border-4 border-purple-300/15 animate-ping" style={{ animationDelay: '0.6s' }} />
-              </>}
-
-              {/* Ping rings — Agent Speaking (emerald) */}
-              {isSpeaking && <>
-                <div className="absolute -inset-4 rounded-full border-4 border-emerald-500/40 animate-ping" />
-                <div className="absolute -inset-4 rounded-full border-4 border-emerald-400/25 animate-ping" style={{ animationDelay: '0.4s' }} />
-                <div className="absolute -inset-4 rounded-full border-4 border-emerald-300/15 animate-ping" style={{ animationDelay: '0.8s' }} />
-              </>}
-
-              {/* Orb — glowing box-shadow + dark tinted interior */}
+              {/* Orb — tinted interior */}
               <div
                 className="relative w-48 h-48 rounded-full flex items-center justify-center transition-all duration-700"
-                style={{ boxShadow: orbShadow }}
               >
                 {/* State-tinted inner background */}
                 <div className={`absolute inset-0 rounded-full transition-all duration-700 ${
@@ -870,8 +833,14 @@ export default function VoiceChat() {
                   isSpeaking     ? 'bg-emerald-100/60' :
                                    'bg-blue-50/50'
                 }`} />
-                {/* Subtle ring edge */}
-                <div className="absolute inset-0 rounded-full border border-gray-200/60" />
+                {/* Pulsing colored border — stays on the orb, no overflow */}
+                <div className={`absolute inset-0 rounded-full border-2 transition-all duration-700 ${
+                  isRecording    ? 'border-blue-400/70 animate-pulse' :
+                  isSttProcessing ? 'border-amber-400/60 animate-pulse' :
+                  isThinking     ? 'border-purple-400/65 animate-pulse' :
+                  isSpeaking     ? 'border-emerald-400/60 animate-pulse' :
+                                   'border-gray-200/60'
+                }`} />
                 <img
                   src={agentforceLogo}
                   alt="Agentforce"
@@ -879,17 +848,6 @@ export default function VoiceChat() {
                   data-testid="voice-mode-logo"
                 />
               </div>
-            </div>
-
-            {/* ── Live waveform bars (recording or speaking) ── */}
-            <div className={`transition-all duration-300 ${
-              isRecording || isSpeaking ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
-            }`}>
-              <AudioVisualizer
-                isActive={isRecording || isSpeaking}
-                height={72}
-                barClassName={isRecording ? 'bg-blue-500' : 'bg-emerald-500'}
-              />
             </div>
 
             {/* ── Status text ── */}
