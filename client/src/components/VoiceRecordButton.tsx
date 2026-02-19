@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHand
 import { Mic, MicOff, AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AudioVisualizer from './AudioVisualizer';
+import { motion } from 'framer-motion';
 
 type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
@@ -20,6 +21,7 @@ interface VoiceRecordButtonProps {
   error?: string;
   onRetry?: () => void;
   maxDuration?: number; // seconds, default 120
+  showStatusText?: boolean;
 }
 
 const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonProps>(function VoiceRecordButton({
@@ -32,6 +34,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   error,
   onRetry,
   maxDuration = 120,
+  showStatusText = true,
 }, ref) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -280,7 +283,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
     
     switch (state) {
       case 'recording':
-        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-lg shadow-recording-active/20 animate-pulse`;
+        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-lg shadow-recording-active/20`;
       case 'processing':
         return `${baseClasses} bg-voice-processing text-voice-processing-foreground cursor-wait`;
       case 'error':
@@ -345,55 +348,66 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       
       {/* Recording Button */}
       <div className="relative flex flex-col items-center">
-        
-        
-        <Button
-          ref={buttonRef}
-          size="icon"
-          disabled={disabled}
-          className={`${getButtonClassName()} ${
-            state === 'recording' ? 'animate-recording-breathe' : ''
-          }`}
-          onClick={handleToggleRecording}
-          onKeyDown={handleKeyDown}
-          data-testid="button-voice-record"
-          aria-label={getStatusText()}
-          aria-pressed={state === 'recording'}
-          aria-describedby={state === 'recording' ? 'recording-instructions' : undefined}
-          role="button"
-          tabIndex={disabled ? -1 : 0}
+        <motion.div
+          animate={state === 'recording' ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+          transition={
+            state === 'recording'
+              ? { repeat: Infinity, duration: 1.6, ease: 'easeInOut' }
+              : { type: 'spring', stiffness: 400, damping: 20 }
+          }
+          whileHover={disabled || state === 'processing' ? undefined : { scale: 1.07 }}
+          whileTap={disabled ? undefined : { scale: 0.91 }}
         >
-          {getIcon()}
-          
-          {/* Enhanced pulse animation for recording state */}
-          {state === 'recording' && (
-            <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-recording-pulse opacity-75" />
-          )}
-        </Button>
+          <Button
+            ref={buttonRef}
+            size="icon"
+            disabled={disabled}
+            className={getButtonClassName()}
+            onClick={handleToggleRecording}
+            onKeyDown={handleKeyDown}
+            data-testid="button-voice-record"
+            aria-label={getStatusText()}
+            aria-pressed={state === 'recording'}
+            aria-describedby={state === 'recording' ? 'recording-instructions' : undefined}
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+          >
+            {getIcon()}
+
+            {/* Expanding ring while recording */}
+            {state === 'recording' && (
+              <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-recording-pulse opacity-75" />
+            )}
+          </Button>
+        </motion.div>
       </div>
       
       {/* Status Text */}
       <div className="text-center">
-        <p 
-          id="recording-instructions"
-          className={`text-sm font-medium transition-colors duration-200 ${
-            state === 'error'
-              ? 'text-destructive'
-              : state === 'recording' && recordingDuration >= maxDuration - 10
-              ? 'text-destructive'
-              : state === 'recording' && recordingDuration >= maxDuration - 30
-              ? 'text-amber-500'
-              : 'text-muted-foreground'
-          }`}
-        >
-          {getStatusText()}
-        </p>
-        
-        {/* Additional error details */}
-        {state === 'error' && error && (
-          <p className="text-xs text-muted-foreground mt-xs" role="alert">
-            {error}
-          </p>
+        {showStatusText && state !== 'idle' && (
+          <>
+            <p
+              id="recording-instructions"
+              className={`text-sm font-medium transition-colors duration-200 ${
+                state === 'error'
+                  ? 'text-destructive'
+                  : state === 'recording' && recordingDuration >= maxDuration - 10
+                  ? 'text-destructive'
+                  : state === 'recording' && recordingDuration >= maxDuration - 30
+                  ? 'text-amber-500'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {getStatusText()}
+            </p>
+
+            {/* Additional error details */}
+            {state === 'error' && error && (
+              <p className="text-xs text-muted-foreground mt-xs" role="alert">
+                {error}
+              </p>
+            )}
+          </>
         )}
         
         {/* Hidden instructions for screen readers */}

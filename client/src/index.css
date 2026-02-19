@@ -590,10 +590,25 @@
       transform: none;
       opacity: 1;
     }
-    
+
     /* Keep some visual indication but no motion */
     .animate-recording-breathe {
       opacity: 0.9;
     }
+  }
+
+  /* Ambient Orb — Voice Mode */
+  @keyframes orbGlow {
+    0%, 100% { opacity: 0.85; transform: scale(1); }
+    50%       { opacity: 1;    transform: scale(1.04); }
+  }
+
+  .animate-orb-glow {
+    animation: orbGlow 3s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-orb-glow { animation: none; }
   }
 }

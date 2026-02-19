@@ -1,7 +1,8 @@
 import { Bot, User, CheckCheck, Clock, Copy, Check, RotateCcw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
 
 const agentforceLogo = '/agentforce-logo.png';
 
@@ -32,7 +33,6 @@ export default function MessageBubble({
   isPlaying = false,
   onRetry,
 }: MessageBubbleProps) {
-  const [hasAnimated, setHasAnimated] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -51,14 +51,6 @@ export default function MessageBubble({
       : formatRelativeTime(timestamp)
     : undefined;
 
-  // Trigger animation on mount for new messages
-  useEffect(() => {
-    if (!isTyping && !hasAnimated) {
-      const timer = setTimeout(() => setHasAnimated(true), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isTyping, hasAnimated]);
-
   // Compute accessibility information
   const messageRole = isUser ? undefined : 'log';
   const ariaLabel = isTyping 
@@ -69,14 +61,15 @@ export default function MessageBubble({
     : `${isUser ? 'You' : 'Agentforce'} said: ${message}${formattedTimestamp ? ` at ${formattedTimestamp}` : ''}`;
 
   return (
-    <div
+    <motion.div
+      initial={isTyping ? false : { opacity: 0, y: 10, x: isUser ? 8 : -8 }}
+      animate={{ opacity: 1, y: 0, x: 0 }}
+      transition={{ type: 'spring', stiffness: 340, damping: 26 }}
       className={`
         group flex items-end gap-sm
         ${isUser ? 'justify-end' : 'justify-start'}
         ${isFirstInGroup ? 'mt-lg' : 'mt-xs'}
         ${isLastInGroup ? 'mb-lg' : 'mb-xs'}
-        ${!isTyping && hasAnimated ? 'animate-message-appear' : ''}
-        ${!isTyping && !hasAnimated ? 'opacity-0' : ''}
       `}
       role={messageRole}
       aria-label={ariaLabel}
@@ -105,21 +98,21 @@ export default function MessageBubble({
         <div
           className={`
             relative px-lg py-md break-words shadow-sm
-            ${isUser 
+            ${isUser
               ? `
-                bg-primary text-primary-foreground 
-                ${isFirstInGroup 
-                  ? 'rounded-l-2xl rounded-tr-2xl rounded-br-md' 
-                  : isLastInGroup 
+                bg-primary text-primary-foreground
+                ${isFirstInGroup
+                  ? 'rounded-l-2xl rounded-tr-2xl rounded-br-md'
+                  : isLastInGroup
                   ? 'rounded-l-2xl rounded-t-md rounded-br-2xl'
                   : 'rounded-l-2xl rounded-r-md'
                 }
-              ` 
+              `
               : `
                 bg-card text-card-foreground border border-card-border
-                ${isFirstInGroup 
-                  ? 'rounded-r-2xl rounded-tl-2xl rounded-bl-md' 
-                  : isLastInGroup 
+                ${isFirstInGroup
+                  ? 'rounded-r-2xl rounded-tl-2xl rounded-bl-md'
+                  : isLastInGroup
                   ? 'rounded-r-2xl rounded-t-md rounded-bl-2xl'
                   : 'rounded-r-2xl rounded-l-md'
                 }
@@ -127,6 +120,7 @@ export default function MessageBubble({
             }
             ${messageState === 'error' ? 'ring-2 ring-destructive/20' : ''}
           `}
+          style={!isUser ? { borderLeftWidth: '3px', borderLeftColor: 'hsl(var(--primary) / 0.3)' } : undefined}
           aria-live={!isUser && !isTyping ? 'polite' : undefined}
         >
           {/* Screen reader text */}
@@ -252,6 +246,6 @@ export default function MessageBubble({
       {isUser && showAvatar && !isFirstInGroup && (
         <div className="w-8 flex-shrink-0" />
       )}
-    </div>
+    </motion.div>
   );
 }
