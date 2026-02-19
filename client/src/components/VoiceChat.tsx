@@ -547,13 +547,14 @@ export default function VoiceChat() {
       </header>
 
       {/* Main Content + Transparency Panel Row */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className={`flex flex-1 ${showConversation ? 'overflow-hidden' : 'overflow-visible'}`}>
 
       {/* Main Content Area */}
       <main
         ref={(el) => { scrollContainerRef.current = el; }}
         onScroll={handleScroll}
         className={`app-content relative flex-1 transition-all duration-700 ${showTransparency ? 'md:pr-80' : ''}`}
+        style={!showConversation ? { overflow: 'visible' } : undefined}
         role="main"
         aria-label="Chat conversation"
       >
@@ -810,17 +811,25 @@ export default function VoiceChat() {
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col items-center justify-center h-full gap-10 select-none pt-16"
             data-testid="voice-center"
-            style={{
-              background: `radial-gradient(circle 280px at 50% 30%, ${glowHalo} 0%, ${glowHaloOuter} 55%, transparent 80%)`,
-              transition: 'background 0.7s ease',
-            }}
           >
 
             {/* ── Ambient Orb ── */}
-            <div className={`relative animate-orb-glow transition-transform duration-500 ${
-              isRecording || isThinking || isSpeaking ? 'scale-110' :
-              isSttProcessing ? 'scale-105' : 'scale-100'
-            }`}>
+            {/* Outer wrapper establishes position context without will-change, so halo isn't clipped by compositing layer */}
+            <div className="relative">
+              {/* Halo sits outside the animated div so will-change:transform doesn't clip it */}
+              <div
+                className="absolute -inset-16 rounded-full blur-3xl transition-all duration-700 pointer-events-none"
+                style={{ background: glowHalo }}
+              />
+              <div
+                className="absolute -inset-28 rounded-full blur-3xl transition-all duration-700 pointer-events-none"
+                style={{ background: glowHaloOuter }}
+              />
+
+              <div className={`relative animate-orb-glow transition-transform duration-500 ${
+                isRecording || isThinking || isSpeaking ? 'scale-110' :
+                isSttProcessing ? 'scale-105' : 'scale-100'
+              }`}>
               {/* Orb — tinted interior */}
               <div
                 className="relative w-48 h-48 rounded-full flex items-center justify-center transition-all duration-700"
@@ -847,6 +856,7 @@ export default function VoiceChat() {
                   className="relative w-28 h-28 object-contain z-10"
                   data-testid="voice-mode-logo"
                 />
+              </div>
               </div>
             </div>
 
