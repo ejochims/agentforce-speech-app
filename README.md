@@ -16,9 +16,9 @@ I built it for my own use across enterprise deals in manufacturing, retail, auto
 
 ---
 
-| Ready | Listening |
-|---|---|
-| ![Ready state — tap the mic to start](docs/screenshot-ready.png) | ![Listening state — live waveform, tap to send](docs/screenshot-listening.png) |
+| Ready | Listening | Thinking |
+|---|---|---|
+| ![Ready state — tap the mic to start](docs/screenshot-ready.png) | ![Listening state — live waveform, tap to send](docs/screenshot-listening.png) | ![Thinking state — agent processing](docs/screenshot-thinking.png) |
 
 ---
 
