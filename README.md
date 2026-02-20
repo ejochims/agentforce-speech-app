@@ -16,6 +16,12 @@ I built it for my own use across enterprise deals in manufacturing, retail, auto
 
 ---
 
+| Ready | Listening |
+|---|---|
+| ![Ready state — tap the mic to start](docs/screenshot-ready.png) | ![Listening state — live waveform, tap to send](docs/screenshot-listening.png) |
+
+---
+
 ## What It Does
 
 - **Voice-first conversation** with any Salesforce Agentforce Service Agent via the Agentforce API
