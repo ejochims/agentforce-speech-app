@@ -6,7 +6,7 @@
 
 ---
 
-## Why This Exists
+## Why I Built This
 
 Agentforce lets users talk to their CRM — ask questions, trigger automations, update records — using natural language. This app gives that capability a voice interface: speak to your agent, get a spoken response, hands-free on any device. A field rep can log notes after a customer visit without touching a keyboard. A support agent can pull case history mid-call by asking for it. A manager can check pipeline status on the way to a meeting.
 
