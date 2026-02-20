@@ -1,618 +1,310 @@
-# Agentforce Speech App - Installation Guide for Solution Engineers
+# Agentforce Speech App
 
-A production-ready Progressive Web App (PWA) that enables seamless voice conversations with Salesforce Agentforce AI agents. Built with modern web technologies and optimized for mobile devices, especially iPhone.
+> A production voice interface for Salesforce Agentforce agents — built by a practitioner, used in enterprise deals.
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](http://sfdc.co/CGEon)
 
-## ✨ Features
+---
 
-- 🎙️ **Real-time voice recording** with visual feedback
-- 🔊 **Premium text-to-speech** using ElevenLabs Allison - millennial voice
-- 🎯 **High-quality speech recognition** with ElevenLabs Scribe v1 model
-- 📱 **PWA capabilities** - installable on iPhone/Android
-- 💬 **Voice-only mode** for hands-free interaction
-- 📝 **Conversation history** with session persistence
-- 🌈 **Visual status indicators** with animated ripple effects
+## Why This Exists
+
+Agentforce is powerful, but showing it to a VP in a conference room or a field rep on a phone requires more than a chat window. This app bridges that gap — giving any Salesforce agent a real voice interface, installable as a native app, with the kind of polish that makes demos land.
+
+It's been used in every multi-million dollar enterprise deal my team has won across five industry verticals: manufacturing, retail, automotive, energy, and consumer goods. After watching teammates struggle to stand up their own instances, I built a one-click Heroku deployment so any SE can go from zero to live demo in under an hour — no command line required.
 
 ---
 
-> **No Command Line Required!** This guide uses Heroku's web interface. You can complete the entire setup from your browser.
+## What It Does
 
-## 📋 Overview
+- **Voice-first conversation** with any Salesforce Agentforce Service Agent via the Agentforce API
+- **Streaming responses with early TTS** — SSE streaming begins playing the first complete sentence via TTS before the full response arrives, reducing perceived latency
+- **Agent Transparency Panel** — a real-time sidebar showing per-request pipeline timing (STT, agent processing, session creation), Salesforce session IDs, message type breakdowns, and expandable raw API responses; designed for technical reviews and demos
+- **Premium speech quality** — ElevenLabs Scribe v1 for transcription, ElevenLabs Allison for natural TTS, via Salesforce Speech Foundations API
+- **Animated visual feedback** — state-driven ripple effects (blue recording → yellow thinking → green speaking) that make the AI feel alive during demos
+- **PWA** — installs on iPhone and Android as a native app; no App Store required
+- **Conversation history** — PostgreSQL-backed session persistence across interactions
+- **Voice-only mode** — hands-free operation for field demos and accessibility use cases
+- **One-click deploy** — full Heroku deployment via web UI, no CLI required
 
-You'll need to:
-1. Enable Einstein and Agentforce in your Salesforce org
-2. Create an Agentforce Service Agent
-3. Create a Connected App for Agentforce API access
-4. Create an External Client App for Speech Foundations API access
-5. Click "Deploy to Heroku" button and configure with your credentials
+---
 
-**Total Setup Time:** ~30-45 minutes
+## Architecture
+
+```
+Client (React 18 + TypeScript + Vite)
+    ├── PWA shell (service worker, manifest, offline UI)
+    ├── Voice recording (MediaRecorder — WebM/Opus, M4A fallback for iOS Safari)
+    ├── SSE streaming consumer with early TTS latency optimization
+    ├── Agent Transparency Panel (per-request observability)
+    ├── Animated UI (Tailwind + shadcn/ui)
+    └── Server state via React Query; routing via wouter (2KB)
+
+Server (Node.js + Express + TypeScript)
+    ├── Salesforce Agentforce API client
+    │     └── SSE streaming endpoint with JSON fallback + conversation expiry recovery
+    ├── Salesforce Speech Foundations API proxy (STT + TTS)
+    ├── Two independent OAuth2 client-credentials connections
+    │     └── In-memory token caching with 25-min expiry
+    └── IStorage interface → MemStorage (default) or PostgreSQL (swap-in)
+
+Database (PostgreSQL via Drizzle ORM)
+    ├── Conversation sessions
+    └── Message turns (user + agent, with Salesforce message IDs)
+
+Tests (Vitest)
+    └── Agentforce client, storage layer, transparency pipeline
+```
+
+**Tech stack:** TypeScript · React 18 · Node.js · Express · PostgreSQL · Drizzle ORM · Salesforce Agentforce API · Salesforce Speech Foundations · ElevenLabs · Heroku
+
+---
+
+## Technical Decisions Worth Noting
+
+**SSE streaming with graceful fallback.** The `/api/agentforce/stream` endpoint exposes Agentforce responses as Server-Sent Events. The client streams chunks in real time, showing text as it arrives. If the SSE endpoint is unavailable or returns an error event, the client transparently falls back to the blocking `/api/agentforce` endpoint. Conversation expiry (404) triggers automatic session recovery rather than an error state.
+
+**Early TTS latency optimization.** Rather than waiting for the full agent response before starting text-to-speech, the streaming client watches for the first complete sentence (ending in `.`, `!`, or `?`) and fires TTS immediately. For responses longer than a sentence, the user hears audio start while generation continues — cutting perceived latency significantly.
+
+**Dual independent OAuth2 connections.** The Agentforce API and Speech Foundations API each use a separate OAuth2 client credentials flow with their own Connected App credentials. Tokens are cached in memory with a 25-minute expiry and refreshed automatically. Credentials are never exposed to the frontend; all Salesforce communication is server-to-server.
+
+**Agent Transparency Panel.** A collapsible sidebar (bottom sheet on mobile, side panel on desktop) surfaces the full pipeline for every interaction: STT processing time and audio size, Agentforce session ID and whether a new session was created, agent processing time, response message count and types from the raw Salesforce API response, and an expandable raw JSON viewer. This was built specifically for technical demo reviews where buyers want to see what's actually happening under the hood.
+
+**iOS Safari audio handling.** iOS requires an audio context unlock during a user gesture before `HTMLAudioElement.play()` can be called programmatically. The recording button fires `unlockAudioForSafari()` on `onBeforeRecording`. Recording uses WebM/Opus where available, with M4A fallback for Safari. A single "blessed" audio element ref is reused for TTS playback to avoid iOS autoplay restrictions.
+
+**Storage interface abstraction.** `IStorage` defines all CRUD operations; the default export is `MemStorage` (in-memory Maps — zero dependencies, works without a database configured). Swapping to PostgreSQL requires only implementing `IStorage` and replacing the export. This made local development and testing straightforward without requiring a running database.
+
+---
+
+## Agent Design Considerations
+
+Not all Agentforce agents work equally well in voice contexts. Before deploying, review [`AGENT_TYPES_AND_CONSIDERATIONS.md`](./AGENT_TYPES_AND_CONSIDERATIONS.md) — it covers:
+
+- Which agent types are suited for voice vs. chat (Service Agent vs. Employee Agent, and why)
+- How to tune agent instructions for spoken responses (concise, no markdown, natural sentence structure)
+- Latency tradeoffs between model quality and response speed
+- What breaks in voice that looks fine in a chat UI
+
+---
+
+## Demo Tips
+
+**Voice-Only Mode** (most impressive for live demos): Toggle off "Show Conversation" to show only the visual feedback animation. Clean, theatrical, immediately understandable to a non-technical executive audience.
+
+**Hybrid Mode** (better for technical reviews): Keep the conversation log visible to show persistence, context retention, and full interaction history.
+
+**Transparency Mode** (for technical buyers): Open the Agent Transparency Panel to show real-time pipeline timing, session management, and raw Salesforce API responses. Makes the "how does this work" conversation concrete.
+
+**Before any demo:**
+- Visit your Heroku URL 15 minutes early to wake the dyno
+- Test end-to-end on the actual device you'll demo on
+- Prepare 3–5 questions tuned to your agent's configured topics
+
+---
+
+## Setup
+
+You'll need:
+- A Salesforce org with Einstein and Agentforce enabled
+- An active Agentforce Service Agent
+- A Heroku account ([Salesforce employees: sign up here](https://basecamp.salesforce.com/content/techforce-heroku-for-sfdc-employees))
+
+**Total setup time: ~30–45 minutes**
+
+### Credentials You'll Gather
+
+| Variable | Source |
+|---|---|
+| `SALESFORCE_DOMAIN_URL` | Setup → My Domain |
+| `SALESFORCE_CONSUMER_KEY` | Connected App → Consumer Details |
+| `SALESFORCE_CONSUMER_SECRET` | Connected App → Consumer Details |
+| `SALESFORCE_AGENT_ID` | Agent Builder URL (`0Xx...`) |
+| `SALESFORCE_SPEECH_DOMAIN_URL` | Same as Domain URL |
+| `SALESFORCE_SPEECH_CONSUMER_KEY` | External Client App → Consumer Details |
+| `SALESFORCE_SPEECH_CONSUMER_SECRET` | External Client App → Consumer Details |
+
+> Full step-by-step walkthrough below. Every step uses the Salesforce and Heroku web interfaces — no terminal required.
 
 ---
 
 ## Part 1: Salesforce Org Setup
 
-### Step 1: Enable Einstein
+### Enable Einstein
 
-1. Go to **Setup** in your Salesforce org
-2. In the Quick Find box, search for **Einstein Setup**
-3. Click **Einstein Setup**
-4. Toggle **Turn on Einstein**
-5. **Refresh the page** (important!)
+1. Setup → search **Einstein Setup**
+2. Toggle **Turn on Einstein** → refresh the page
 
-### Step 2: Enable Agentforce
+### Enable Agentforce
 
-1. In Setup, search for **Agentforce Agents**
-2. Click **Turn on Agentforce**
-3. **Refresh the page** (important!)
+1. Setup → search **Agentforce Agents**
+2. Click **Turn on Agentforce** → refresh the page
 
-### Step 3: Create an Agentforce Service Agent
+### Create an Agentforce Service Agent
 
-> **Note:** This prototype is designed to work with **Agentforce Service Agent**. It has not been tested with Agentforce Employee Agent.
+> This app is designed for **Agentforce Service Agent**. It has not been tested with Employee Agent.
 
-1. In Setup, go to **Agentforce Agents**
-2. Click **New Agent**
-3. Select **Service Agent**
-4. Configure your agent:
-   - Add a name and description
-   - Configure topics and instructions
-   - Connect any necessary data sources
-5. Click **Save**
-6. **Activate** your agent
-7. **Deploy** your agent to make it available
-8. Open the agent to view its details
-9. **Copy the Agent ID** from the URL
-   - The URL looks like: `https://your-domain.lightning.force.com/lightning/setup/AgentBuilder/page?address=/0Xx...`
-   - The Agent ID is the alphanumeric string after the last `/` (starts with `0Xx`)
-   - **Save this as:** `SALESFORCE_AGENT_ID`
+1. Setup → **Agentforce Agents** → **New Agent** → **Service Agent**
+2. Add name, description, topics, instructions, and data sources
+3. **Save** → **Activate** → **Deploy**
+4. Open the agent and copy the Agent ID from the URL (the string after the last `/`, starts with `0Xx`)
+5. Save as `SALESFORCE_AGENT_ID`
 
-### Step 4: Get Your My Domain URL
+### Get Your Domain URL
 
-1. In Setup, search for **My Domain**
-2. Copy your full domain URL (e.g., `https://your-domain.my.salesforce.com`)
-3. **Save this as BOTH:**
-   - `SALESFORCE_DOMAIN_URL`
-   - `SALESFORCE_SPEECH_DOMAIN_URL` (yes, use the same URL for both!)
+1. Setup → **My Domain**
+2. Copy your full domain URL (e.g. `https://your-domain.my.salesforce.com`)
+3. Save as both `SALESFORCE_DOMAIN_URL` and `SALESFORCE_SPEECH_DOMAIN_URL`
 
 ---
 
-## Part 2: Create Connected App for Agentforce API
+## Part 2: Connected App for Agentforce API
 
-This Connected App will provide access to the Agentforce API for agent conversations.
+### Create the App
 
-### Step 1: Create the Connected App
+1. Setup → **External Client Apps** → **Settings**
+2. Enable **Allow access to External Client App consumer secrets via REST API**
+3. Enable **Allow Creation of Connected Apps**
+4. Click **New External Client App**
+5. Fill in name and contact email
 
-1. In Setup, go to **External Client Apps** >> **Settings
-2. Toggle on Allow access to External Client App consumer secrets via REST API
-3. Toggle on "Allow Creation of Connected Apps" Click **New External Client App**
-4. Fill in basic information:
-   - **Connected App Name:** `Agentforce Voice Chat` (or your preferred name)
-   - **API Name:** (will auto-populate)
-   - **Contact Email:** Your email address
+### Configure OAuth
 
-### Step 2: Enable OAuth Settings
+- **Callback URL:** `https://login.salesforce.com`
+- **Scopes to add:**
+  - Access chatbot services (`chatbot_api`)
+  - Access the Salesforce API Platform (`sfap_api`)
+  - Manage user data via APIs (`api`)
+  - Perform requests at any time (`refresh_token, offline_access`)
+- **Uncheck:** Require PKCE, Require Secret for Web Server Flow, Require Secret for Refresh Token Flow
+- **Check:** Enable Client Credentials Flow, Issue JWT-based access tokens
 
-1. Check the box: **Enable OAuth Settings**
-2. **Callback URL:** Enter `https://login.salesforce.com`
-3. **Selected OAuth Scopes** - Add these scopes:
-   - Access chatbot services (chatbot_api)
-   - Access the Salesforce API Platform (sfap_api)
-   - Manage user data via APIs (api)
-   - Perform requests at any time (refresh_token, offline_access)
+### Configure Policies
 
-4. **Deselect these checkboxes:**
-   - ❌ Require Proof Key for Code Exchange (PKCE) Extension for Support Authorization Flows
-   - ❌ Require Secret for Web Server Flow
-   - ❌ Require Secret for Refresh Token Flow
+1. From the app → **Manage** → **Edit Policies**
+2. **Permitted Users:** Admin approved users are pre-authorized
+3. **Client Credentials Flow → Run As:** Select a system integration user
+4. Save
 
-5. **Select these checkboxes:**
-   - ✅ Enable Client Credentials Flow
-   - ✅ Issue JSON Web Token (JWT)-based access tokens for named users
+### Get Credentials
 
-6. Click **Save**
-7. Click **Continue** on any warning messages
+1. Setup → App Manager → find your app → **View** → **Manage Consumer Details**
+2. Verify identity, then copy:
+   - Consumer Key → save as `SALESFORCE_CONSUMER_KEY`
+   - Consumer Secret → save as `SALESFORCE_CONSUMER_SECRET`
 
-### Step 3: Configure OAuth Policies
+### Connect App to Your Agent
 
-1. From the Connected App detail page, click **Manage**
-2. Click **Edit Policies**
-3. In the **OAuth Policies** section:
-   - **Permitted Users:** Select the appropriate option (typically "Admin approved users are pre-authorized" or "All users may self-authorize")
-4. In the **Client Credentials Flow** section:
-   - **Run As:** Select a user with at least API Only access (typically a system integration user)
-5. In the **JWT-Based Access Token Settings** section:
-   - Keep **Issue JSON Web Token (JWT)-based access tokens** checked
-   - Leave **Token Timeout** at 30 minutes
-6. Click **Save**
+1. Setup → **Agentforce Agents** → your agent → **Open in Builder**
+2. **Connections** tab → turn on updated connections experience
+3. **Messaging** connection → **External Apps** → **Add External App**
+4. Select **API** connection type → choose your Connected App → Save
 
-### Step 4: Get Consumer Key and Secret
+> Without this step, all API calls will fail with auth errors.
 
-1. Go to Setup > App Manager > Click the arrow to the right of the app you just created and select VIEW
-2. Then click the "Manage Consumer Details" Button. 
-3. Verify your identity (you may need to enter a verification code sent to your email)
-4. **Copy the Consumer Key**
-   - **Save this as:** `SALESFORCE_CONSUMER_KEY`
-5. **Copy the Consumer Secret**
-   - **Save this as:** `SALESFORCE_CONSUMER_SECRET`
+### Grant User Access
 
-### Step 5: Add Connected App to Your Agent
-
-Before the API can access your agent, you must connect the app to it:
-
-1. Go to **Setup** → **Agentforce Agents**
-2. Click on your agent name
-3. Click **Open in Builder**
-4. Click the **Connections** tab
-5. If you see an option to turn on the updated connections experience, click **Turn It On**
-6. Select the **Messaging** connection
-7. Scroll down to the **External Apps** section
-8. Click **Add External App**
-9. Select **API** connection type
-10. Choose your Connected App from the dropdown
-11. Click **Save**
-
-> **Important:** Without this step, your API calls will fail with authentication errors!
-
-### Step 6: Add Connected App to Your User 
-
-In order to allow the voice UI to access the voice connected application that was created in part two, we must create a permission set providing access to the connect app, and assign that permission set to the admin user that was used in the Client Credentials Flow section.
-
-To do that, follow these steps:
-1. Setup -> Permission Sets
-2. Click New
-3. Create a label like "Agentforce Voice Connect App Permissions" - this will populate the API Name
-4. Click Save
-5. Select Assigned Connected Apps
-6. Click Edit
-7. Find and select the connected app that was created in Part 2
-8. Click Save
-9. Click Close
-10. Click Manage Assignments then Add Assignment
-11. Select you user, click Next then Assign
+1. Setup → **Permission Sets** → **New**
+2. Name it (e.g. "Agentforce Voice Connect App Permissions") → Save
+3. **Assigned Connected Apps** → **Edit** → add your Connected App → Save
+4. **Manage Assignments** → **Add Assignment** → select your integration user → Assign
 
 ---
 
-## Part 3: Create External Client App for Speech Foundations API
+## Part 3: External Client App for Speech Foundations API
 
-This External Client App provides access to Salesforce's Speech Foundations API for speech-to-text and text-to-speech.
+### Create the App
 
-### Step 1: Create the External Client App
+1. Setup → **External Client App Manager** → **New**
+2. Name it, add your email, keep **Distribution State: Local**
 
-1. In Setup, search for **External Client App Manager**
-2. Click **New**
-3. Fill in the details:
-   - **Name:** `Speech Foundations API` (or your preferred name)
-   - **Email:** Your email address
-   - **Distribution State:** Keep as **Local**
+### Configure OAuth
 
-### Step 2: Enable OAuth Settings
+- **Callback URL:** `https://login.salesforce.com`
+- **Scopes:** `sfap_api`, `api`, `refresh_token, offline_access`
+- **Check:** Enable Client Credentials Flow, Issue JWT-based access tokens
+- **Uncheck:** Require PKCE
 
-1. In the **API** section, check **Enable OAuth** for the ECA
-2. **Callback URL:** Enter `https://login.salesforce.com`
-3. **Selected OAuth Scopes** - Add these:
-   - Access the Salesforce API Platform (sfap_api)
-   - Manage user data via APIs (api)
-   - Perform requests at any time (refresh_token, offline_access)
+### Configure Policies
 
-4. **Select these checkboxes:**
-   - ✅ Enable Client Credentials Flow
-   - ✅ Issue JSON Web Token (JWT)-based access tokens for named users
+1. Edit the app → **OAuth Policies** → **Client Credentials Flow**
+2. Enable, set **Run As** to your integration user
+3. Enable JWT-based access tokens → Save
 
-5. **Deselect this checkbox:**
-   - ❌ Require Proof Key for Code Exchange (PKCE) Extension for Support Authorization Flows
+### Get Credentials
 
-6. Click **Save**
-
-### Step 3: Configure OAuth Policies
-
-1. Click **Edit** on your External Client App
-2. Expand the **OAuth Policies** section
-3. Under **Client Credentials Flow**:
-   - Check the box to enable it
-   - **Run As:** Select a user with at least API Only access
-4. Under **JWT-Based Access Token Settings**:
-   - Check **Issue JSON Web Token (JWT)-based access tokens**
-   - Leave timeout at 30 minutes
-5. Click **Save**
-
-### Step 4: Get Consumer Key and Secret
-
-1. In the External Client App Manager, select your app
-2. Click the **Settings** tab
-3. Expand **OAuth Settings**
-4. Click **Consumer Key and Secret** (you may need to verify your identity)
-5. **Copy the Consumer Key**
-   - **Save this as:** `SALESFORCE_SPEECH_CONSUMER_KEY`
-6. **Copy the Consumer Secret**
-   - **Save this as:** `SALESFORCE_SPEECH_CONSUMER_SECRET`
+1. External Client App Manager → your app → **Settings** → **OAuth Settings** → **Consumer Key and Secret**
+2. Copy:
+   - Consumer Key → save as `SALESFORCE_SPEECH_CONSUMER_KEY`
+   - Consumer Secret → save as `SALESFORCE_SPEECH_CONSUMER_SECRET`
 
 ---
 
-## Part 4: Deploy to Heroku (Web Interface)
+## Part 4: Deploy to Heroku
 
-Now that you have all your Salesforce credentials, you're ready to deploy! We'll use Heroku's web interface - no command line required.
+### Click Deploy
 
-### Step 1: Click the Deploy to Heroku Button
+Click the **Deploy to Heroku** button at the top of this README.
 
-1. Click the purple **"Deploy to Heroku"** button at the top of this README
-2. You'll be redirected to Heroku's deployment page
-3. Log in to your Heroku account (or create one)
+### Configure
 
-> **Don't have a Heroku account?** SEs can sign up for accounts at https://basecamp.salesforce.com/content/techforce-heroku-for-sfdc-employees
+1. Choose an app name and region
+2. Fill in all environment variables from your credentials checklist above
 
+> ⚠️ Both domain URLs **must** include `https://` — e.g. `https://your-domain.my.salesforce.com`
 
-### Step 2: Configure Your App
+### Deploy
 
-On the Heroku deployment page, you'll see a form to fill out:
+Click **Deploy app** → build takes 2–3 minutes. PostgreSQL provisions automatically.
 
-1. **App name:** Choose a unique name for your app (e.g., `my-agentforce-demo-2024`)
-   - This will be part of your URL: `https://your-app-name.herokuapp.com`
-   - Leave blank to let Heroku generate a random name
+**If the database doesn't provision automatically:**
+1. App dashboard → **Resources** → search `postgres` → add **Heroku Postgres Essential-0** ($5/mo)
+2. App dashboard → **More** → **Run console** → run `npm run db:push`
 
-2. **Choose a region:** Select the region closest to you or your users
-   - United States
-   - Europe
+### Verify
 
-### Step 3: Enter Environment Variables
-
-Now fill in all the credentials you gathered from Parts 1-3. Paste your values into each field:
-
-| Config Variable | Your Value |
-|----------------|------------|
-| `SALESFORCE_DOMAIN_URL` | `https://your-domain.my.salesforce.com` |
-| `SALESFORCE_CONSUMER_KEY` | Your Connected App Consumer Key |
-| `SALESFORCE_CONSUMER_SECRET` | Your Connected App Consumer Secret |
-| `SALESFORCE_AGENT_ID` | Your Agent ID (starts with `0Xx`) |
-| `SALESFORCE_SPEECH_DOMAIN_URL` | Same as `SALESFORCE_DOMAIN_URL` |
-| `SALESFORCE_SPEECH_CONSUMER_KEY` | Your External Client App Key |
-| `SALESFORCE_SPEECH_CONSUMER_SECRET` | Your External Client App Secret |
-| `NODE_ENV` | `production` |
-
-> **⚠️ IMPORTANT:** Both domain URLs **MUST** start with `https://` (include the protocol!)
-> - ✅ Correct: `https://your-domain.my.salesforce.com`
-> - ❌ Wrong: `your-domain.my.salesforce.com` (missing https://)
-
-**Double-check:** Make sure there are no extra spaces before or after your values!
-
-### Step 4: Deploy the App
-
-1. Click the **"Deploy app"** button at the bottom
-2. Wait for the build to complete (this takes 2-3 minutes)
-3. You'll see:
-   - "Installing dependencies..."
-   - "Building..."
-   - "Launching..."
-   - "Your app was successfully deployed"
-
-> **Good news!** The PostgreSQL database and initial database setup should happen automatically during deployment. However, if you see any database errors, follow the manual steps below.
-
-### Step 5: Verify Database (Usually Automatic)
-
-After deployment completes, verify the database was created:
-
-1. Click **"Manage App"** button
-2. You'll be taken to your app's dashboard
-3. Click on the **"Resources"** tab
-4. You should see **"Heroku Postgres"** listed under "Add-ons"
-
-**If you DON'T see PostgreSQL:**
-1. In the "Add-ons" section, type `postgres` in the search box
-2. Select **"Heroku Postgres"**
-3. Choose the **"Essential-0"** plan ($5/month)
-4. Click **"Submit Order Form"**
-5. Wait for the database to provision (about 1-2 minutes)
-
-### Step 6: Initialize Database (Only if Needed)
-
-The database tables should be created automatically. Only do this step if you see database errors in your logs:
-
-1. On your app's dashboard, click the **"More"** dropdown (top right)
-2. Select **"Run console"**
-3. In the command box, type: `npm run db:push`
-4. Click **"Run"**
-5. Wait for the command to complete (you'll see database migration messages)
-6. Click **"Close"** when done
-
-> **CLI Alternative:** `heroku run "npm run db:push" -a your-app-name`
-
-### Step 7: Open Your App!
-
-1. Back on your app's dashboard, click **"Open app"** (top right corner)
-2. Your Agentforce Speech App will open in a new tab! 🎉
-
-Your app is now live at: `https://your-app-name.herokuapp.com`
+1. **Open app** from the Heroku dashboard
+2. Grant microphone permissions
+3. Press and hold the mic button, speak a question, release
+4. You should see: blue (processing) → yellow (thinking) → green (speaking) → audio response
 
 ---
 
-## ✅ Environment Variables Checklist
+## Managing Your Deployment
 
-Before deploying, confirm you have all these values:
+All management tasks work from the Heroku web dashboard at [dashboard.heroku.com](https://dashboard.heroku.com).
 
-| Variable | Source | Example |
-|----------|--------|---------|
-| `SALESFORCE_DOMAIN_URL` | Setup → My Domain | `https://mydomain.my.salesforce.com` |
-| `SALESFORCE_CONSUMER_KEY` | Connected App → Consumer Key | `3MVG9VTfp...` |
-| `SALESFORCE_CONSUMER_SECRET` | Connected App → Consumer Secret | `2A7BAEB06F...` |
-| `SALESFORCE_AGENT_ID` | Agent URL | `0XxHu000000jyjAKAQ` |
-| `SALESFORCE_SPEECH_DOMAIN_URL` | Same as Domain URL | `https://mydomain.my.salesforce.com` |
-| `SALESFORCE_SPEECH_CONSUMER_KEY` | External Client App → Consumer Key | `3MVG9VTfp...` |
-| `SALESFORCE_SPEECH_CONSUMER_SECRET` | External Client App → Consumer Secret | `FE3012648B...` |
-| `NODE_ENV` | Set manually | `production` |
-| `DATABASE_URL` | Auto-set by Heroku | (automatic) |
+| Task | Where |
+|---|---|
+| View/edit env variables | Settings → Config Vars → Reveal Config Vars |
+| View live logs | More → View logs |
+| Restart app | More → Restart all dynos |
+| Run DB migrations | More → Run console → `npm run db:push` |
 
 ---
 
-## 🧪 Testing Your Installation
+## Troubleshooting
 
-### 1. Check the Logs
+**"Failed to parse URL"** — Your domain URL is missing `https://`. Fix in Settings → Config Vars.
 
-```bash
-heroku logs --tail
-```
+**401 Unauthorized** — Verify Consumer Key/Secret are correct. Wait 2–10 minutes after creating or modifying Connected Apps for propagation. Confirm Client Credentials Flow is enabled and the Connected App is linked to your agent (Part 2).
 
-Look for these success messages:
-- `✅ OAuth successful - instance URL: ...`
-- `✅ Speech Foundations token obtained successfully`
-- `serving on port ...`
+**"Agent not found"** — Verify the Agent ID, confirm the agent is activated and deployed, and confirm the Connected App is added to the agent under Connections.
 
-### 2. Test Voice Interaction
+**Microphone doesn't work** — Grant permissions in your browser. Must be on HTTPS (Heroku provides this). On iOS, tap rather than hold to trigger the permission dialog first.
 
-1. Open your app in a browser
-2. Grant microphone permissions when prompted
-3. Press and hold the microphone button
-4. Speak a test question
-5. Release the button
-6. You should see:
-   - Blue animation while processing
-   - Your transcribed text appears
-   - Yellow pulse while agent thinks
-   - Green ripple while agent speaks
-   - Audio response plays
-
-### 3. Install as PWA (Optional)
-
-Test the mobile experience:
-- **iPhone:** Safari → Share → "Add to Home Screen"
-- **Android:** Chrome → Menu → "Add to Home Screen"
+**No audio** — Check browser audio permissions, device volume, and iOS mute switch.
 
 ---
 
-## 🔧 Managing Your Heroku App
+## Deploy Another Instance
 
-All of these tasks can be done from the Heroku web dashboard. Go to https://dashboard.heroku.com and select your app.
-
-### View Configuration (Environment Variables)
-
-**Web UI:**
-1. Go to your app's dashboard
-2. Click **"Settings"** tab
-3. Scroll down to **"Config Vars"**
-4. Click **"Reveal Config Vars"** to see all your environment variables
-
-**CLI Alternative:**
-```bash
-heroku config -a your-app-name
-```
-
-### View Logs
-
-**Web UI:**
-1. Go to your app's dashboard
-2. Click **"More"** dropdown (top right)
-3. Select **"View logs"**
-4. Logs will stream in real-time
-
-**CLI Alternative:**
-```bash
-heroku logs --tail -a your-app-name
-```
-
-### Update an Environment Variable
-
-**Web UI:**
-1. Go to **Settings** tab
-2. Scroll to **"Config Vars"**
-3. Click **"Reveal Config Vars"**
-4. Find the variable you want to change
-5. Click the pencil icon or add a new one
-6. Enter the new value
-7. The app will automatically restart
-
-**CLI Alternative:**
-```bash
-heroku config:set SALESFORCE_AGENT_ID=new_agent_id -a your-app-name
-```
-
-### Check App Status
-
-**Web UI:**
-1. Go to **"Resources"** tab
-2. View dyno status under "Dynos" section
-3. See if dynos are running or sleeping
-
-**CLI Alternative:**
-```bash
-heroku ps -a your-app-name
-```
-
-### Restart the App
-
-**Web UI:**
-1. Click **"More"** dropdown (top right)
-2. Select **"Restart all dynos"**
-3. Confirm the restart
-
-**CLI Alternative:**
-```bash
-heroku restart -a your-app-name
-```
-
-### Run Database Migrations Again
-
-**Web UI:**
-1. Click **"More"** dropdown
-2. Select **"Run console"**
-3. Type: `npm run db:push`
-4. Click **"Run"**
-
-**CLI Alternative:**
-```bash
-heroku run "npm run db:push" -a your-app-name
-```
+Click **Deploy to Heroku** again. Each deployment is fully independent with its own database. To demo a different agent, deploy a new instance and change only `SALESFORCE_AGENT_ID`.
 
 ---
 
-## ❗ Troubleshooting
+## Contributing
 
-> **First Step for Any Issue:** Check your logs! Go to your Heroku dashboard → More → View logs to see what's happening.
-
-### "Failed to parse URL" Error
-
-**Problem:** Error message like "Failed to parse URL from your-domain.my.salesforce.com"
-
-**Cause:** Missing `https://` in domain URL configuration
-
-**Solution:**
-1. Go to Heroku dashboard → **Settings** → **Config Vars**
-2. Find `SALESFORCE_DOMAIN_URL` and `SALESFORCE_SPEECH_DOMAIN_URL`
-3. Make sure both start with `https://`
-   - ❌ Wrong: `your-domain.my.salesforce.com`
-   - ✅ Correct: `https://your-domain.my.salesforce.com`
-4. Save changes (app restarts automatically)
-
-### "Authentication failed" Error
-
-**Problem:** API calls return 401 Unauthorized
-
-**How to check:**
-1. In Heroku dashboard, go to **More** → **View logs**
-2. Look for error messages containing "401" or "Authentication failed"
-
-**Solutions:**
-1. Verify your Consumer Key and Secret are correct (Settings → Config Vars)
-2. Wait 2-10 minutes after creating/modifying Connected Apps (propagation delay)
-3. Ensure **Client Credentials Flow** is enabled in your Connected App
-4. Check that OAuth scopes include required permissions
-
-### "Agent not found" Error
-
-**Problem:** Cannot create conversation session
-
-**Solutions:**
-1. Verify your Agent ID is correct
-2. Ensure the agent is **Activated** and **Deployed**
-3. **Most common issue:** Make sure you added the Connected App to your agent (Part 2, Step 5)
-
-### Voice Recording Doesn't Work
-
-**Problem:** Microphone button doesn't record
-
-**Solutions:**
-1. Grant microphone permissions in your browser
-2. Ensure you're using HTTPS (Heroku provides this automatically)
-3. On iOS, tap the button (don't just hold) to trigger permissions
-
-### No Audio Playback
-
-**Problem:** Text-to-speech doesn't play
-
-**Solutions:**
-1. Check browser audio permissions
-2. Ensure volume is turned up
-3. On iOS, unmute your device
-4. Try refreshing the page
-
-### Speech-to-Text or Text-to-Speech Fails
-
-**Problem:** STT/TTS API calls fail
-
-**Solutions:**
-1. Verify Speech Foundations is enabled in your org
-2. Check External Client App credentials are correct
-3. Ensure the domain URL is correct
-4. Verify the External Client App has required OAuth scopes
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md). Issues and PRs welcome.
 
 ---
 
-## 💡 Demo Tips
-
-### Before Your Demo
-
-1. ✅ Test the app end-to-end at least 1 hour before
-2. ✅ Wake up your Heroku dyno (visit the URL) 15 minutes before
-3. ✅ Prepare example questions that showcase your agent
-4. ✅ Test on the actual device you'll demo on (especially mobile)
-5. ✅ Have a stable internet connection
-
-### During Your Demo
-
-**Voice-Only Mode (Most Impressive):**
-- Toggle off "Show Conversation"
-- Demonstrate the beautiful visual feedback
-- Highlight the natural voice interaction
-
-**Hybrid Mode (Good for Presentations):**
-- Keep conversation history visible
-- Shows persistence and full chat log
-- Easier to reference what was said
-
-### Common Demo Scenarios
-
-- **Customer Service:** "I need help with my recent order"
-- **Account Information:** "What's my account balance?"
-- **Product Questions:** "Tell me about your product features"
-- **General Inquiry:** "What services do you offer?"
-
-Customize these based on your agent's configuration!
-
----
-
-## 📞 Getting Help
-
-If you encounter issues:
-
-1. **Check the logs:** 
-   - Web UI: Heroku dashboard → More → View logs
-   - CLI: `heroku logs --tail -a your-app-name`
-2. **Verify all environment variables:** 
-   - Web UI: Heroku dashboard → Settings → Reveal Config Vars
-   - CLI: `heroku config -a your-app-name`
-3. **Review this guide** - did you complete all steps?
-4. **Slack:** Post in your team's Salesforce/Agentforce channel
-5. **GitHub:** Open an issue at the repository
-
----
-
-## 🎉 Success!
-
-You now have a fully functional Agentforce Speech App deployed and ready for demos!
-
-**Your app URL:** 
-- Find it on your Heroku dashboard (top of the page)
-- Click **"Open app"** to launch it
-- URL format: `https://your-app-name.herokuapp.com`
-
-Share the URL with stakeholders, install it as a PWA on your phone, and start showcasing the power of Agentforce with voice interactions!
-
-### Quick Access
-
-Bookmark these for easy access:
-- **Your app:** `https://your-app-name.herokuapp.com`
-- **Heroku dashboard:** https://dashboard.heroku.com/apps/your-app-name
-- **GitHub repo:** https://github.com/ejochims/agentforce-speech-app
-
----
-
-## 🔄 Need to Deploy Another Instance?
-
-Just click the "Deploy to Heroku" button again! You can:
-- Use the same Salesforce credentials for multiple deployments
-- Create different apps for different agents (just change the `SALESFORCE_AGENT_ID`)
-- Deploy separate instances for different demos or customers
-
-Each deployment is independent and has its own database and conversations.
-
----
-
-**Built with ❤️ for seamless AI voice interactions**
+*Built for enterprise AI demos that need to land in the room.*
