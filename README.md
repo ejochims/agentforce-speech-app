@@ -8,7 +8,9 @@
 
 ## Why This Exists
 
-Agentforce is powerful, but showing it to a VP in a conference room or a field rep on a phone requires more than a chat window. This app bridges that gap — giving any Salesforce agent a real voice interface, installable as a native app, with the kind of polish that makes demos land.
+Agentforce lets users talk to their CRM — ask questions, trigger automations, update records — using natural language. This app gives that capability a voice interface: speak to your agent, get a spoken response, hands-free on any device. A field rep can log notes after a customer visit without touching a keyboard. A support agent can pull case history mid-call by asking for it. A manager can check pipeline status on the way to a meeting.
+
+The underlying Agentforce agent handles the business logic. This app makes it accessible by voice, as a native-feeling PWA that installs on iPhone and Android in seconds.
 
 I built it for my own use across enterprise deals in manufacturing, retail, automotive, energy, and consumer goods — then open-sourced it after watching teammates spend hours standing up their own versions from scratch. The one-click Heroku deploy gets any SE from zero to live demo in under an hour, no command line required.
 
