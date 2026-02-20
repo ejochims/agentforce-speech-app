@@ -10,7 +10,7 @@
 
 Agentforce is powerful, but showing it to a VP in a conference room or a field rep on a phone requires more than a chat window. This app bridges that gap — giving any Salesforce agent a real voice interface, installable as a native app, with the kind of polish that makes demos land.
 
-It's been used in every multi-million dollar enterprise deal my team has won across five industry verticals: manufacturing, retail, automotive, energy, and consumer goods. After watching teammates struggle to stand up their own instances, I built a one-click Heroku deployment so any SE can go from zero to live demo in under an hour — no command line required.
+I built it for my own use across enterprise deals in manufacturing, retail, automotive, energy, and consumer goods — then open-sourced it after watching teammates spend hours standing up their own versions from scratch. The one-click Heroku deploy gets any SE from zero to live demo in under an hour, no command line required.
 
 ---
 
