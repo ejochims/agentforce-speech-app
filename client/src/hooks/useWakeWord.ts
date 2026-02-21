@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 // Phrases detected as substrings in the continuous transcript.
 // Kept short and phonetically distinct so they survive noisy STT.
-const WAKE_PHRASES = ['hey agentforce', 'hey agent force', 'hey agent'];
+// 'agentforce' alone is a safe fallback — wake word is paused during TTS
+// so the agent's own spoken response can't accidentally retrigger it.
+const WAKE_PHRASES = ['hey agentforce', 'hey agent force', 'hey agent', 'agentforce'];
 
 // Minimum ms between detections — prevents a single recognition result
 // from firing the callback multiple times if the phrase spans results.
@@ -76,8 +78,17 @@ export function useWakeWord({ enabled, isPipelineBusy, onDetected }: UseWakeWord
 
           console.log('🎙️ Wake word detected:', transcript);
           activeRef.current = false; // prevent auto-restart during the pipeline
-          stopCurrent();
-          onDetectedRef.current();
+
+          // Override onend for THIS instance so that onDetected is called only
+          // AFTER the recognition has fully stopped and released the microphone.
+          // Calling getUserMedia() while SpeechRecognition still holds the mic
+          // causes a silent failure on iOS (NotReadableError).
+          recognition.onend = () => {
+            setIsListening(false);
+            recognitionRef.current = null;
+            onDetectedRef.current();
+          };
+          try { recognition.stop(); } catch { /* ignore */ }
           return;
         }
       }

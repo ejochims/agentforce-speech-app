@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
 export interface VoiceRecordButtonHandle {
-  startRecording: () => Promise<void>;
+  startRecording: (opts?: { silenceTimeoutMs?: number }) => Promise<void>;
   stopRecording: (cancelled?: boolean) => void;
 }
 
@@ -50,6 +50,13 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   const isStartingRef = useRef(false);   // true while getUserMedia/setup is in progress
   const pendingStopRef = useRef(false);  // true if stop was requested before setup finished
 
+  // Silence detection state (for wake-word-triggered recordings)
+  const silenceDetectionRef = useRef<{
+    intervalId: ReturnType<typeof setInterval>;
+    audioCtx: AudioContext;
+    source: MediaStreamAudioSourceNode;
+  } | null>(null);
+
   // Haptic feedback helper
   const triggerHapticFeedback = (pattern: number | number[]) => {
     if ('vibrate' in navigator) {
@@ -62,7 +69,19 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
     }
   };
 
-  const startRecording = async () => {
+  const clearSilenceDetection = useCallback(() => {
+    if (silenceDetectionRef.current) {
+      clearInterval(silenceDetectionRef.current.intervalId);
+      try { silenceDetectionRef.current.source.disconnect(); } catch { /* ignore */ }
+      silenceDetectionRef.current.audioCtx.close().catch(() => {});
+      silenceDetectionRef.current = null;
+    }
+  }, []);
+
+  // Tear down silence detection on unmount
+  useEffect(() => () => clearSilenceDetection(), [clearSilenceDetection]);
+
+  const startRecording = async (opts?: { silenceTimeoutMs?: number }) => {
     // Guard: don't allow concurrent starts
     if (isStartingRef.current || mediaRecorder.current?.state === 'recording') {
       console.log('startRecording: already starting or recording, ignoring');
@@ -143,6 +162,51 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
         return;
       }
 
+      // ── Silence detection for wake-word-triggered recordings ─────────────
+      // When silenceTimeoutMs is provided (wake word path), auto-stop after
+      // the user goes silent for that many ms.  Uses Web Audio API to measure
+      // RMS amplitude; a 500 ms grace period lets the user start speaking.
+      if (opts?.silenceTimeoutMs) {
+        try {
+          const AudioContextClass: typeof AudioContext =
+            window.AudioContext ?? (window as any).webkitAudioContext;
+          const audioCtx = new AudioContextClass();
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          const source = audioCtx.createMediaStreamSource(stream);
+          source.connect(analyser);
+          const data = new Uint8Array(analyser.frequencyBinCount);
+          const SILENCE_RMS_THRESHOLD = 5; // 0-128 scale; ~background noise floor
+          const START_GRACE_MS = 500;
+          const recordingStartTime = Date.now();
+          let lastSpeechTime = Date.now();
+
+          const intervalId = setInterval(() => {
+            if (mediaRecorder.current?.state !== 'recording') {
+              clearSilenceDetection();
+              return;
+            }
+            if (Date.now() - recordingStartTime < START_GRACE_MS) return;
+
+            analyser.getByteTimeDomainData(data);
+            // Values are 0-255 where 128 is the centre (silence).
+            const rms = Math.sqrt(
+              data.reduce((sum, v) => sum + (v - 128) ** 2, 0) / data.length
+            );
+            if (rms > SILENCE_RMS_THRESHOLD) {
+              lastSpeechTime = Date.now();
+            } else if (Date.now() - lastSpeechTime > opts.silenceTimeoutMs!) {
+              clearSilenceDetection();
+              stopRecording(false);
+            }
+          }, 150);
+
+          silenceDetectionRef.current = { intervalId, audioCtx, source };
+        } catch (err) {
+          console.warn('Silence detection setup failed:', err);
+        }
+      }
+
       setIsRecording(true);
       setRecordingDuration(0);
       startTimeRef.current = Date.now();
@@ -194,6 +258,9 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   };
 
   const stopRecording = useCallback((cancelled: boolean = false) => {
+    // Always tear down silence detection — safe to call even if not active
+    clearSilenceDetection();
+
     // If still setting up (getUserMedia hasn't finished), queue a pending stop
     if (isStartingRef.current) {
       console.log('stopRecording: recording still starting — queuing pending stop');
@@ -231,7 +298,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       setRecordingDuration(0);
       console.log('Recording stopped');
     }
-  }, []); // no dependency on isRecording — uses refs for reliability
+  }, [clearSilenceDetection]); // clearSilenceDetection is stable (useCallback [])
 
   // Expose imperative API so parent can trigger recording programmatically (e.g. Space PTT)
   useImperativeHandle(ref, () => ({

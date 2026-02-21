@@ -267,7 +267,9 @@ export default function VoiceChat() {
       if (!voiceRecordRef.current) return;
       // VoiceRecordButton.startRecording() calls onBeforeRecording (stops TTS +
       // unlocks Safari audio) and then onRecordingStart — same path as a button tap.
-      voiceRecordRef.current.startRecording();
+      // silenceTimeoutMs enables VAD auto-stop so the user doesn't need to
+      // manually tap the button after speaking their wake-word utterance.
+      voiceRecordRef.current.startRecording({ silenceTimeoutMs: 1800 });
     }, []),
   });
 
@@ -312,7 +314,7 @@ export default function VoiceChat() {
             </h1>
             {/* Session status badge — only shown when connected to live Agentforce */}
             {settings && settings.agentforceMode !== 'stub' && (
-              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+              <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${
                 conversation.turns.length > 0 || agentStream.isAgentStreaming
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                   : 'bg-blue-50 border-blue-200 text-blue-600'
@@ -327,15 +329,15 @@ export default function VoiceChat() {
                   : 'Connected'}
               </span>
             )}
-          </div>
 
-          {/* Wake word active indicator */}
-          {wakeWordListening && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 border-violet-200 text-violet-700 select-none">
-              <Radio className="w-2.5 h-2.5 animate-pulse" />
-              Hey Agentforce
-            </span>
-          )}
+            {/* Wake word active indicator — inside the left group so layout stays 2-column */}
+            {wakeWordListening && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 border-violet-200 text-violet-700 select-none flex-shrink-0">
+                <Radio className="w-2.5 h-2.5 animate-pulse" />
+                <span className="hidden sm:inline">Hey Agentforce</span>
+              </span>
+            )}
+          </div>
 
           {/* Header Actions */}
           <div className="flex items-center gap-sm">
