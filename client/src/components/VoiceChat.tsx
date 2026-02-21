@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { safeStorage } from '@/lib/safeStorage';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
+import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio, Moon, Mic, KeyboardIcon, Sparkles } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -18,6 +19,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
@@ -45,19 +54,25 @@ export default function VoiceChat() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showConversation, setShowConversation] = useState<boolean>(() =>
-    localStorage.getItem('showConversation') === 'true'
+    safeStorage.getItem('showConversation') === 'true'
   );
   const [showTextInput, setShowTextInput] = useState(false);
   const [textMessage, setTextMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showTransparency, setShowTransparency] = useState<boolean>(() =>
-    localStorage.getItem('showTransparency') === 'true'
+    safeStorage.getItem('showTransparency') === 'true'
   );
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showVoiceHint] = useState(false); // retired — welcome state covers this
   const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
-    () => localStorage.getItem('wakeWordEnabled') === 'true'
+    () => safeStorage.getItem('wakeWordEnabled') === 'true'
+  );
+  const [darkMode, setDarkMode] = useState<boolean>(
+    () => safeStorage.getItem('darkMode') === 'true'
+  );
+  const [showWelcome, setShowWelcome] = useState<boolean>(
+    () => !safeStorage.getItem('hasSeenWelcome')
   );
 
   // Ref to VoiceRecordButton so the wake word handler can start recording programmatically
@@ -131,6 +146,11 @@ export default function VoiceChat() {
       });
     }, [conversation.currentConversationId, conversation.createTurn, transparency, tts.audioEnabled]),
   });
+
+  // ─── Dark mode ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
 
   // ─── Auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -347,7 +367,7 @@ export default function VoiceChat() {
               onClick={() => {
                 const next = !showConversation;
                 setShowConversation(next);
-                localStorage.setItem('showConversation', String(next));
+                safeStorage.setItem('showConversation', String(next));
               }}
               title={showConversation ? 'Switch to voice-only mode' : 'Show conversation'}
               aria-label={showConversation ? 'Switch to voice-only mode' : 'Show conversation'}
@@ -419,7 +439,7 @@ export default function VoiceChat() {
                               if (editingTitleId === conv.id) return;
                               if (!isCurrentConversation) {
                                 conversation.setCurrentConversationId(conv.id);
-                                localStorage.setItem('currentConversationId', conv.id);
+                                safeStorage.setItem('currentConversationId', conv.id);
                                 conversation.queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
                                 transparency.clearEvents();
                               }
@@ -546,6 +566,24 @@ export default function VoiceChat() {
                   </div>
 
                   <div className="flex items-center justify-between space-x-4">
+                    <Label htmlFor="dark-mode" className="flex flex-col space-y-1">
+                      <span className="text-sm font-medium">Dark Mode</span>
+                      <span className="text-xs text-muted-foreground">
+                        Switch to a darker colour scheme
+                      </span>
+                    </Label>
+                    <Switch
+                      id="dark-mode"
+                      checked={darkMode}
+                      onCheckedChange={(checked) => {
+                        setDarkMode(checked);
+                        safeStorage.setItem('darkMode', String(checked));
+                      }}
+                      data-testid="toggle-dark-mode"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between space-x-4">
                     <Label
                       htmlFor="wake-word"
                       className={`flex flex-col space-y-1 ${!wakeWordSupported ? 'opacity-50' : ''}`}
@@ -563,7 +601,7 @@ export default function VoiceChat() {
                       disabled={!wakeWordSupported}
                       onCheckedChange={(checked) => {
                         setWakeWordEnabled(checked);
-                        localStorage.setItem('wakeWordEnabled', String(checked));
+                        safeStorage.setItem('wakeWordEnabled', String(checked));
                       }}
                       data-testid="toggle-wake-word"
                     />
@@ -581,7 +619,7 @@ export default function VoiceChat() {
                       checked={showTransparency}
                       onCheckedChange={(checked) => {
                         setShowTransparency(checked);
-                        localStorage.setItem('showTransparency', String(checked));
+                        safeStorage.setItem('showTransparency', String(checked));
                       }}
                       data-testid="button-transparency"
                     />
@@ -657,7 +695,7 @@ export default function VoiceChat() {
                       variant="outline"
                       onClick={() => {
                         tts.setShowAudioPrompt(false);
-                        localStorage.setItem('audioEnabled', 'false');
+                        safeStorage.setItem('audioEnabled', 'false');
                       }}
                       className="rounded-full"
                       data-testid="button-disable-audio"
@@ -1112,13 +1150,85 @@ export default function VoiceChat() {
         </div>
       </footer>
 
+      {/* Welcome Dialog — shown once to new users */}
+      <Dialog open={showWelcome} onOpenChange={(open) => {
+        if (!open) {
+          setShowWelcome(false);
+          safeStorage.setItem('hasSeenWelcome', 'true');
+        }
+      }}>
+        <DialogContent className="sm:max-w-sm rounded-2xl" data-testid="dialog-welcome">
+          <DialogHeader className="text-center items-center pb-2">
+            <div className="w-16 h-16 rounded-full bg-blue-50 border border-blue-100/80 flex items-center justify-center mb-3 mx-auto">
+              <img src={agentforceLogo} alt="Agentforce" className="w-10 h-10 object-contain" />
+            </div>
+            <DialogTitle className="text-xl">Welcome to Agentforce</DialogTitle>
+            <DialogDescription className="text-sm text-center">
+              Your AI-powered voice assistant. Here's how to get started.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Mic className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Tap to talk</p>
+                <p className="text-xs text-muted-foreground">Press the mic button and speak your question</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <KeyboardIcon className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Or type instead</p>
+                <p className="text-xs text-muted-foreground">Tap the pencil icon to switch to text input</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Volume2 className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Voice responses</p>
+                <p className="text-xs text-muted-foreground">Enable voice in Settings to hear replies spoken aloud</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Hands-free mode</p>
+                <p className="text-xs text-muted-foreground">Say "Hey Agentforce" to start recording — enable in Settings</p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button
+              className="w-full rounded-full"
+              onClick={() => {
+                setShowWelcome(false);
+                safeStorage.setItem('hasSeenWelcome', 'true');
+              }}
+              data-testid="button-welcome-get-started"
+            >
+              Get Started
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Agent Transparency Panel */}
       <AgentTransparencyPanel
         events={transparency.pipelineEvents}
         isVisible={showTransparency}
         onToggle={() => {
           setShowTransparency(false);
-          localStorage.setItem('showTransparency', 'false');
+          safeStorage.setItem('showTransparency', 'false');
         }}
       />
     </div>

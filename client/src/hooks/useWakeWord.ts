@@ -1,5 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+// Browser SpeechRecognition types — not always present in TypeScript's lib.dom
+// across all environments, so declared explicitly here.
+declare global {
+  interface SpeechRecognition extends EventTarget {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    maxAlternatives: number;
+    onstart: (() => void) | null;
+    onend: (() => void) | null;
+    onresult: ((event: SpeechRecognitionEvent) => void) | null;
+    onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+    start(): void;
+    stop(): void;
+    abort(): void;
+  }
+  interface SpeechRecognitionEvent extends Event {
+    resultIndex: number;
+    results: SpeechRecognitionResultList;
+  }
+  interface SpeechRecognitionErrorEvent extends Event {
+    error: string;
+  }
+}
+
 // Phrases detected as substrings in the continuous transcript.
 // Kept short and phonetically distinct so they survive noisy STT.
 // 'agentforce' alone is a safe fallback — wake word is paused during TTS

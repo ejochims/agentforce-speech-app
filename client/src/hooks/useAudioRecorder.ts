@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
 
@@ -16,6 +16,9 @@ export function useAudioRecorder({ onTranscription }: UseAudioRecorderConfig) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  // Ref-based guard: prevents VAD silence-stop and manual tap-stop from both
+  // submitting the same audio blob concurrently.
+  const isProcessingRef = useRef(false);
 
   const handleRecordingStart = () => {
     setIsRecording(true);
@@ -40,6 +43,11 @@ export function useAudioRecorder({ onTranscription }: UseAudioRecorderConfig) {
       return;
     }
 
+    if (isProcessingRef.current) {
+      console.warn('handleRecordingStop called while already processing — ignoring duplicate');
+      return;
+    }
+
     if (audioBlob.size === 0 || audioBlob.size < 100) {
       console.error('Audio recording is empty or too small:', audioBlob.size, 'bytes');
       setRecordingError('Recording too short or empty. Please hold the button longer and speak clearly.');
@@ -47,6 +55,7 @@ export function useAudioRecorder({ onTranscription }: UseAudioRecorderConfig) {
       return;
     }
 
+    isProcessingRef.current = true;
     setRecordingState('processing');
 
     try {
@@ -86,6 +95,8 @@ export function useAudioRecorder({ onTranscription }: UseAudioRecorderConfig) {
       console.error('Error processing voice:', error);
       setRecordingError(`Processing failed: ${message}`);
       setRecordingState('error');
+    } finally {
+      isProcessingRef.current = false;
     }
   };
 

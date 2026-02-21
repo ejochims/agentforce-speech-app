@@ -169,7 +169,11 @@ export class SpeechFoundationsClient {
     }
 
     const result: SpeechSynthesisResponse = await response.json();
-    
+
+    if (!result.audioStream) {
+      throw new Error('Speech synthesis response missing audioStream field');
+    }
+
     // Convert base64 audioStream to Buffer
     const audioBuffer = Buffer.from(result.audioStream, 'base64');
     

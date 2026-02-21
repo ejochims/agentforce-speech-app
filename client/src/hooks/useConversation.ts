@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { safeStorage } from '@/lib/safeStorage';
 import type { Conversation, Turn } from '@shared/schema';
 
 interface UseConversationConfig {
@@ -38,7 +39,7 @@ export function useConversation({ onTriggerAgent }: UseConversationConfig) {
     onSuccess: (conversation: Conversation, variables) => {
       console.log('✓ New conversation created:', conversation.id);
       setCurrentConversationId(conversation.id);
-      localStorage.setItem('currentConversationId', conversation.id);
+      safeStorage.setItem('currentConversationId', conversation.id);
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
 
       if (variables.retryAgentRequest) {
@@ -123,7 +124,7 @@ export function useConversation({ onTriggerAgent }: UseConversationConfig) {
       throw new Error(`Conversation not found: ${response.status}`);
     } catch (error) {
       console.log('✗ Conversation validation failed:', error);
-      localStorage.removeItem('currentConversationId');
+      safeStorage.removeItem('currentConversationId');
       setCurrentConversationId(null);
       return false;
     } finally {
@@ -134,7 +135,7 @@ export function useConversation({ onTriggerAgent }: UseConversationConfig) {
   // Initialize conversation on mount
   useEffect(() => {
     const initializeConversation = async () => {
-      const existingId = localStorage.getItem('currentConversationId');
+      const existingId = safeStorage.getItem('currentConversationId');
       if (existingId) {
         console.log('🔍 Validating existing conversation:', existingId);
         const isValid = await validateAndSetConversation(existingId);
@@ -152,7 +153,7 @@ export function useConversation({ onTriggerAgent }: UseConversationConfig) {
 
   const startNewChat = () => {
     setCurrentConversationId(null);
-    localStorage.removeItem('currentConversationId');
+    safeStorage.removeItem('currentConversationId');
     queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
     createConversation({ title: 'Voice Chat', status: 'active' });
   };
@@ -173,7 +174,7 @@ export function useConversation({ onTriggerAgent }: UseConversationConfig) {
   // Called when agent returns a 404 (conversation expired) — creates new conversation and retries
   const recoverAndRetry = (text: string) => {
     console.log('🔄 Conversation not found, recovering by creating new conversation');
-    localStorage.removeItem('currentConversationId');
+    safeStorage.removeItem('currentConversationId');
     setCurrentConversationId(null);
     createConversation({ title: 'Voice Chat', status: 'active', retryAgentRequest: { text } });
   };
