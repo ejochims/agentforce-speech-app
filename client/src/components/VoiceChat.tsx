@@ -276,7 +276,7 @@ export default function VoiceChat() {
     <div className="app-shell">
       {/* Mobile App Header */}
       <header className="app-header" role="banner">
-        <div className="flex items-center justify-between px-lg py-md h-14">
+        <div className="flex items-center justify-between px-lg py-sm">
           <div className="flex items-center gap-md flex-1">
             <img
               src={agentforceLogo}
