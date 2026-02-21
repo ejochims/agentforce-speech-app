@@ -342,7 +342,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   };
 
   const getButtonClassName = () => {
-    const baseClasses = 'w-20 h-20 rounded-full transition-all duration-300 relative overflow-visible touch-target';
+    const baseClasses = 'w-20 h-20 rounded-full transition-all duration-300 relative overflow-visible touch-target outline-none border-0';
     
     if (disabled) {
       return `${baseClasses} bg-recording-inactive text-recording-inactive-foreground cursor-not-allowed`;
