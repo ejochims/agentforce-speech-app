@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
+import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -338,7 +338,7 @@ export default function VoiceChat() {
           )}
 
           {/* Header Actions */}
-          <div className="flex items-center gap-xs">
+          <div className="flex items-center gap-sm">
             <Drawer open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
               <DrawerTrigger asChild>
                 <Button
@@ -491,20 +491,6 @@ export default function VoiceChat() {
               <Plus className="w-4 h-4" />
             </Button>
 
-            {conversation.turns.length > 0 && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="rounded-full"
-                onClick={handleExportTranscript}
-                data-testid="button-export-transcript"
-                title="Download transcript"
-                aria-label="Download conversation transcript"
-              >
-                <Download className="w-4 h-4" />
-              </Button>
-            )}
-
             {/* Audio Toggle Button */}
             <Button
               size="icon"
@@ -515,22 +501,6 @@ export default function VoiceChat() {
               title={tts.audioEnabled ? 'Disable voice responses' : 'Enable voice responses'}
             >
               {tts.audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </Button>
-
-            {/* Transparency Panel Toggle */}
-            <Button
-              size="icon"
-              variant={showTransparency ? 'default' : 'ghost'}
-              className="rounded-full"
-              onClick={() => {
-                const next = !showTransparency;
-                setShowTransparency(next);
-                localStorage.setItem('showTransparency', String(next));
-              }}
-              data-testid="button-transparency"
-              title={showTransparency ? 'Hide agent transparency' : 'Show agent transparency'}
-            >
-              <Zap className="w-4 h-4" />
             </Button>
 
             <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
@@ -594,6 +564,38 @@ export default function VoiceChat() {
                       data-testid="toggle-wake-word"
                     />
                   </div>
+
+                  <div className="flex items-center justify-between space-x-4">
+                    <Label htmlFor="show-transparency" className="flex flex-col space-y-1">
+                      <span className="text-sm font-medium">Agent Transparency</span>
+                      <span className="text-xs text-muted-foreground">
+                        Show pipeline timing and debug info
+                      </span>
+                    </Label>
+                    <Switch
+                      id="show-transparency"
+                      checked={showTransparency}
+                      onCheckedChange={(checked) => {
+                        setShowTransparency(checked);
+                        localStorage.setItem('showTransparency', String(checked));
+                      }}
+                      data-testid="button-transparency"
+                    />
+                  </div>
+
+                  {conversation.turns.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-full"
+                        onClick={() => { handleExportTranscript(); setIsSettingsOpen(false); }}
+                        data-testid="button-export-transcript"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download Transcript
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </SheetContent>
             </Sheet>
