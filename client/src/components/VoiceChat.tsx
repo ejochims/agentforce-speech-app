@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { safeStorage } from '@/lib/safeStorage';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio, Moon, Mic, KeyboardIcon, Sparkles } from 'lucide-react';
 import {
@@ -53,25 +54,25 @@ export default function VoiceChat() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showConversation, setShowConversation] = useState<boolean>(() =>
-    localStorage.getItem('showConversation') === 'true'
+    safeStorage.getItem('showConversation') === 'true'
   );
   const [showTextInput, setShowTextInput] = useState(false);
   const [textMessage, setTextMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showTransparency, setShowTransparency] = useState<boolean>(() =>
-    localStorage.getItem('showTransparency') === 'true'
+    safeStorage.getItem('showTransparency') === 'true'
   );
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showVoiceHint] = useState(false); // retired — welcome state covers this
   const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
-    () => localStorage.getItem('wakeWordEnabled') === 'true'
+    () => safeStorage.getItem('wakeWordEnabled') === 'true'
   );
   const [darkMode, setDarkMode] = useState<boolean>(
-    () => localStorage.getItem('darkMode') === 'true'
+    () => safeStorage.getItem('darkMode') === 'true'
   );
   const [showWelcome, setShowWelcome] = useState<boolean>(
-    () => !localStorage.getItem('hasSeenWelcome')
+    () => !safeStorage.getItem('hasSeenWelcome')
   );
 
   // Ref to VoiceRecordButton so the wake word handler can start recording programmatically
@@ -366,7 +367,7 @@ export default function VoiceChat() {
               onClick={() => {
                 const next = !showConversation;
                 setShowConversation(next);
-                localStorage.setItem('showConversation', String(next));
+                safeStorage.setItem('showConversation', String(next));
               }}
               title={showConversation ? 'Switch to voice-only mode' : 'Show conversation'}
               aria-label={showConversation ? 'Switch to voice-only mode' : 'Show conversation'}
@@ -438,7 +439,7 @@ export default function VoiceChat() {
                               if (editingTitleId === conv.id) return;
                               if (!isCurrentConversation) {
                                 conversation.setCurrentConversationId(conv.id);
-                                localStorage.setItem('currentConversationId', conv.id);
+                                safeStorage.setItem('currentConversationId', conv.id);
                                 conversation.queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
                                 transparency.clearEvents();
                               }
@@ -576,7 +577,7 @@ export default function VoiceChat() {
                       checked={darkMode}
                       onCheckedChange={(checked) => {
                         setDarkMode(checked);
-                        localStorage.setItem('darkMode', String(checked));
+                        safeStorage.setItem('darkMode', String(checked));
                       }}
                       data-testid="toggle-dark-mode"
                     />
@@ -600,7 +601,7 @@ export default function VoiceChat() {
                       disabled={!wakeWordSupported}
                       onCheckedChange={(checked) => {
                         setWakeWordEnabled(checked);
-                        localStorage.setItem('wakeWordEnabled', String(checked));
+                        safeStorage.setItem('wakeWordEnabled', String(checked));
                       }}
                       data-testid="toggle-wake-word"
                     />
@@ -618,7 +619,7 @@ export default function VoiceChat() {
                       checked={showTransparency}
                       onCheckedChange={(checked) => {
                         setShowTransparency(checked);
-                        localStorage.setItem('showTransparency', String(checked));
+                        safeStorage.setItem('showTransparency', String(checked));
                       }}
                       data-testid="button-transparency"
                     />
@@ -694,7 +695,7 @@ export default function VoiceChat() {
                       variant="outline"
                       onClick={() => {
                         tts.setShowAudioPrompt(false);
-                        localStorage.setItem('audioEnabled', 'false');
+                        safeStorage.setItem('audioEnabled', 'false');
                       }}
                       className="rounded-full"
                       data-testid="button-disable-audio"
@@ -1153,7 +1154,7 @@ export default function VoiceChat() {
       <Dialog open={showWelcome} onOpenChange={(open) => {
         if (!open) {
           setShowWelcome(false);
-          localStorage.setItem('hasSeenWelcome', 'true');
+          safeStorage.setItem('hasSeenWelcome', 'true');
         }
       }}>
         <DialogContent className="sm:max-w-sm rounded-2xl" data-testid="dialog-welcome">
@@ -1211,7 +1212,7 @@ export default function VoiceChat() {
               className="w-full rounded-full"
               onClick={() => {
                 setShowWelcome(false);
-                localStorage.setItem('hasSeenWelcome', 'true');
+                safeStorage.setItem('hasSeenWelcome', 'true');
               }}
               data-testid="button-welcome-get-started"
             >
@@ -1227,7 +1228,7 @@ export default function VoiceChat() {
         isVisible={showTransparency}
         onToggle={() => {
           setShowTransparency(false);
-          localStorage.setItem('showTransparency', 'false');
+          safeStorage.setItem('showTransparency', 'false');
         }}
       />
     </div>

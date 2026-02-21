@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { safeStorage } from '@/lib/safeStorage';
 
 export function useTextToSpeech() {
   const [audioEnabled, setAudioEnabled] = useState<boolean>(
-    () => localStorage.getItem('audioEnabled') === 'true'
+    () => safeStorage.getItem('audioEnabled') === 'true'
   );
   const [showAudioPrompt, setShowAudioPrompt] = useState<boolean>(
-    () => localStorage.getItem('audioEnabled') === null
+    () => safeStorage.getItem('audioEnabled') === null
   );
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [pendingAudioText, setPendingAudioText] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export function useTextToSpeech() {
 
   // Restore audio context for returning users who previously enabled audio
   useEffect(() => {
-    if (localStorage.getItem('audioEnabled') === 'true') {
+    if (safeStorage.getItem('audioEnabled') === 'true') {
       try {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         setAudioContext(ctx);
@@ -31,7 +32,7 @@ export function useTextToSpeech() {
       } catch (error) {
         console.error('❌ Failed to restore audio context:', error);
         setAudioEnabled(false);
-        localStorage.setItem('audioEnabled', 'false');
+        safeStorage.setItem('audioEnabled', 'false');
       }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -147,20 +148,22 @@ export function useTextToSpeech() {
       setAudioEnabled(true);
       audioEnabledRef.current = true; // Update ref immediately so playTextAsAudio sees it
       setShowAudioPrompt(false);
-      localStorage.setItem('audioEnabled', 'true');
+      safeStorage.setItem('audioEnabled', 'true');
       console.log('✓ Audio context initialized');
 
       if (pendingAudioText) {
         console.log('🎵 Playing pending audio text:', pendingAudioText.substring(0, 50) + '...');
-        await playTextAsAudio(pendingAudioText);
-        setPendingAudioText(null);
+        const played = await playTextAsAudio(pendingAudioText);
+        // Only clear if playback succeeded — on failure playTextAsAudio already
+        // restores pendingAudioText so the user can retry via the pending banner.
+        if (played) setPendingAudioText(null);
       }
 
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize audio:', error);
       setAudioEnabled(false);
-      localStorage.setItem('audioEnabled', 'false');
+      safeStorage.setItem('audioEnabled', 'false');
       return false;
     }
   }, [pendingAudioText, playTextAsAudio]);
@@ -172,7 +175,7 @@ export function useTextToSpeech() {
     audioEnabledRef.current = false;
     setShowAudioPrompt(false);
     setPendingAudioText(null);
-    localStorage.setItem('audioEnabled', 'false');
+    safeStorage.setItem('audioEnabled', 'false');
   }, [audioContext]);
 
   // Must be called during a user gesture (before recording) to unlock Safari iOS audio
@@ -201,7 +204,7 @@ export function useTextToSpeech() {
         console.log('🔊 Auto-enabling audio after successful unlock');
         setAudioEnabled(true);
         audioEnabledRef.current = true;
-        localStorage.setItem('audioEnabled', 'true');
+        safeStorage.setItem('audioEnabled', 'true');
         setShowAudioPrompt(false);
       }
     } finally {

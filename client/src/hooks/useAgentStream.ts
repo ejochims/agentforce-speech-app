@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import type { TransparencyData } from '@/components/AgentTransparencyPanel';
@@ -28,6 +28,7 @@ export function useAgentStream({
 }: UseAgentStreamConfig) {
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [isAgentStreaming, setIsAgentStreaming] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Blocking fallback endpoint — used when SSE is unavailable or returns an error event
   const { mutate: getAgentResponse, isPending: agentPending } = useMutation({
@@ -57,6 +58,11 @@ export function useAgentStream({
   });
 
   const streamAgentResponse = async (userText: string, convId: string) => {
+    // Abort any in-flight stream before starting a new one
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsAgentStreaming(true);
     setStreamingText(null);
 
@@ -65,6 +71,7 @@ export function useAgentStream({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: userText, conversationId: convId }),
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -141,7 +148,13 @@ export function useAgentStream({
         onSaveTurn(convId, accumulatedText);
         if (!ttsStarted && audioEnabled) playTextAsAudio(accumulatedText);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        // Intentionally cancelled — clean up state silently
+        setStreamingText(null);
+        setIsAgentStreaming(false);
+        return;
+      }
       console.error('❌ Stream fetch error, falling back to blocking request:', error);
       setStreamingText(null);
       setIsAgentStreaming(false);
