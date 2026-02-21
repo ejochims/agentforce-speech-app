@@ -320,6 +320,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Agentforce streaming integration (SSE)
   app.post('/api/agentforce/stream', async (req, res) => {
     const pipelineStart = Date.now();
+    // Hoisted so the catch block can clean up an orphaned session if needed
+    let sessionId: string | undefined;
+    let isNewSession = false;
+    let sessionPersisted = true;
 
     try {
       const { text, conversationId } = req.body;
@@ -343,9 +347,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
 
-      let sessionId = conversation.sessionId || undefined;
-      const isNewSession = !sessionId;
+      sessionId = conversation.sessionId || undefined;
+      isNewSession = !sessionId;
       let sessionCreationMs: number | undefined;
+      sessionPersisted = !isNewSession; // pre-existing sessions are already stored
 
       if (!sessionId) {
         const sessionStart = Date.now();
@@ -368,6 +373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (sessionId !== conversation.sessionId) {
             await storage.updateConversationSessionId(conversationId, sessionId!);
+            sessionPersisted = true;
           }
 
           console.log(`✅ Streaming response complete (${agentProcessingMs}ms): ${fullText.substring(0, 80)}...`);
@@ -400,6 +406,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error: any) {
       console.error('Error in streaming Agentforce endpoint:', error);
+      // If we created a new session but failed before persisting it, clean it up
+      // to avoid leaking sessions on Salesforce.
+      if (isNewSession && sessionId && !sessionPersisted) {
+        agentforceClient.endSession(sessionId).catch((e) =>
+          console.error('Failed to clean up orphaned session:', e)
+        );
+      }
       // If headers not sent yet, send JSON error; otherwise send SSE error event
       if (!res.headersSent) {
         res.status(500).json({ error: 'Failed to get Agentforce response', details: error.message });
