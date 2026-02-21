@@ -338,17 +338,17 @@ export default function VoiceChat() {
           )}
 
           {/* Header Actions */}
-          <div className="flex items-center gap-sm">
+          <div className="flex items-center gap-xs">
             <Drawer open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
               <DrawerTrigger asChild>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="touch-target w-11 h-11 rounded-full"
+                  className="rounded-full"
                   data-testid="button-history"
                   aria-label="View conversation history"
                 >
-                  <History className="w-5 h-5" />
+                  <History className="w-4 h-4" />
                 </Button>
               </DrawerTrigger>
               <DrawerContent className="max-h-[85vh]">
@@ -482,26 +482,26 @@ export default function VoiceChat() {
             <Button
               size="icon"
               variant="ghost"
-              className="touch-target w-11 h-11 rounded-full"
+              className="rounded-full"
               onClick={handleStartNewChat}
               data-testid="button-new-chat"
               title="New conversation"
               aria-label="Start new conversation"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
             </Button>
 
             {conversation.turns.length > 0 && (
               <Button
                 size="icon"
                 variant="ghost"
-                className="touch-target w-11 h-11 rounded-full"
+                className="rounded-full"
                 onClick={handleExportTranscript}
                 data-testid="button-export-transcript"
                 title="Download transcript"
                 aria-label="Download conversation transcript"
               >
-                <Download className="w-5 h-5" />
+                <Download className="w-4 h-4" />
               </Button>
             )}
 
@@ -509,19 +509,19 @@ export default function VoiceChat() {
             <Button
               size="icon"
               variant="ghost"
-              className="touch-target w-11 h-11 rounded-full"
+              className="rounded-full"
               onClick={() => tts.audioEnabled ? tts.disableAudio() : tts.initializeAudio()}
               data-testid={`button-audio-${tts.audioEnabled ? 'enabled' : 'disabled'}`}
               title={tts.audioEnabled ? 'Disable voice responses' : 'Enable voice responses'}
             >
-              {tts.audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              {tts.audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </Button>
 
             {/* Transparency Panel Toggle */}
             <Button
               size="icon"
               variant={showTransparency ? 'default' : 'ghost'}
-              className="touch-target w-11 h-11 rounded-full"
+              className="rounded-full"
               onClick={() => {
                 const next = !showTransparency;
                 setShowTransparency(next);
@@ -530,7 +530,7 @@ export default function VoiceChat() {
               data-testid="button-transparency"
               title={showTransparency ? 'Hide agent transparency' : 'Show agent transparency'}
             >
-              <Zap className="w-5 h-5" />
+              <Zap className="w-4 h-4" />
             </Button>
 
             <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
@@ -538,10 +538,10 @@ export default function VoiceChat() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="touch-target w-11 h-11 rounded-full"
+                  className="rounded-full"
                   data-testid="button-settings"
                 >
-                  <Settings className="w-5 h-5" />
+                  <Settings className="w-4 h-4" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="right" className="w-80">
