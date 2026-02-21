@@ -7,10 +7,14 @@
 This is a **production-ready Progressive Web App (PWA)** that demonstrates the power of Salesforce's AI platform by enabling natural voice conversations with Agentforce agents. It showcases:
 
 - ✅ **Salesforce Speech Foundations API** - Premium voice capabilities (powered by ElevenLabs)
-- ✅ **Salesforce Agentforce API** - Intelligent AI agent conversations
+- ✅ **Salesforce Agentforce API** - Intelligent AI agent conversations with SSE streaming
 - ✅ **Modern web architecture** - React, TypeScript, Node.js
 - ✅ **Mobile-first design** - Installable as a native-like app
 - ✅ **Real-time voice interaction** - Natural, conversational AI
+- ✅ **Wake word detection** - Hands-free "Hey Agentforce" trigger
+- ✅ **Text input fallback** - Keyboard input when voice isn't ideal
+- ✅ **Agent transparency panel** - Pipeline timing and raw API response viewer
+- ✅ **Dark mode** - Comfortable in low-light environments
 
 **Key Selling Points:**
 - 100% Salesforce platform (no third-party AI services)
@@ -41,7 +45,7 @@ This is a **production-ready Progressive Web App (PWA)** that demonstrates the p
 │  HEROKU (Node.js Server)                                        │
 │  ┌────────────────────────────────────────────────────────┐    │
 │  │  Backend - Express + TypeScript                         │    │
-│  │  • API endpoints (/transcribe, /chat, /synthesize)      │    │
+│  │  • API endpoints (/api/stt, /api/agentforce, /api/tts)   │    │
 │  │  • OAuth 2.0 authentication                             │    │
 │  │  • Session management                                   │    │
 │  │  • Database operations                                  │    │
@@ -131,13 +135,13 @@ Frontend
   → Stops MediaRecorder
   → Finalizes audio blob
   → Creates FormData with audio file
-  → POSTs to /api/transcribe endpoint
+  → POSTs to /api/stt endpoint
   → Shows "Processing..." state
 ```
 
 **Network Request:**
 ```http
-POST /api/transcribe
+POST /api/stt
 Content-Type: multipart/form-data
 
 [audio file binary data]
@@ -167,15 +171,18 @@ SpeechFoundationsService (speech-foundations.ts)
 POST https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/transcriptions
 Authorization: Bearer {access_token}
 x-sfdc-app-context: EinsteinGPT
+x-client-feature-id: external-edc
 
 Content-Type: multipart/form-data
-file: [audio data]
+input: [audio data]
+engine: internal
+language: english
 ```
 
 **Response:**
 ```json
 {
-  "text": "What's the weather like today?"
+  "transcription": ["What's the weather like today?"]
 }
 ```
 
@@ -187,35 +194,56 @@ file: [audio data]
 ```
 Backend
   → Receives transcribed text
-  → Calls AgentforceService.sendMessage()
-  
-AgentforceService (agentforce.ts)
-  → Creates or retrieves conversation session
+  → Calls AgentforceClient.chatWithAgentInConversation()
+
+AgentforceClient (agentforce.ts)
+  → Creates or retrieves Agentforce session
   → Gets OAuth access token (cached or new)
-  → Calls Agentforce Conversation API
+  → If new session: POST /agents/{agentId}/sessions to start session
+  → Calls Agentforce Messages API
   → Endpoint: https://api.salesforce.com/einstein/ai-agent/v1/
-              conversations/{sessionId}/messages
+              sessions/{sessionId}/messages
   → Returns agent's response
 ```
 
-**Salesforce API Call:**
+**Salesforce API Calls:**
 ```http
-POST https://api.salesforce.com/einstein/ai-agent/v1/conversations/{sessionId}/messages
+# Step 1: Start a session (only if new conversation)
+POST https://api.salesforce.com/einstein/ai-agent/v1/agents/{agentId}/sessions
 Authorization: Bearer {access_token}
+Content-Type: application/json
 
 {
-  "agentId": "{SALESFORCE_AGENT_ID}",
-  "message": "What's the weather like today?",
-  "contextVariables": {}
+  "externalSessionKey": "{uuid}",
+  "instanceConfig": { "endpoint": "{instance_url}" },
+  "streamingCapabilities": { "chunkTypes": ["Text"] }
+}
+
+# Step 2: Send message
+POST https://api.salesforce.com/einstein/ai-agent/v1/sessions/{sessionId}/messages
+Authorization: Bearer {access_token}
+Content-Type: application/json
+
+{
+  "message": {
+    "sequenceId": 1,
+    "type": "Text",
+    "text": "What's the weather like today?"
+  }
 }
 ```
 
 **Response:**
 ```json
 {
-  "messageId": "msg_abc123",
-  "response": "The current weather in San Francisco is sunny with a temperature of 68°F.",
-  "conversationId": "conv_xyz789"
+  "messages": [
+    {
+      "message": "The current weather in San Francisco is sunny with a temperature of 68°F.",
+      "type": "Text"
+    }
+  ],
+  "sessionId": "session_xyz789",
+  "status": "Success"
 }
 ```
 
@@ -227,30 +255,38 @@ Authorization: Bearer {access_token}
 ```
 Backend
   → Takes agent's text response
-  → Calls SpeechFoundationsService.synthesize()
-  
-SpeechFoundationsService
+  → Calls SpeechFoundationsClient.synthesizeSpeech()
+
+SpeechFoundationsClient
   → Gets OAuth access token
   → Calls Salesforce Speech API (TTS)
   → Endpoint: https://api.salesforce.com/einstein/platform/v1/
               models/transcribeInternalV1/speech-synthesis
   → Specifies voice (default: Allison - millennial)
-  → Returns audio file (MP3)
+  → Returns JSON with base64-encoded audio
 ```
 
 **Salesforce API Call:**
 ```http
 POST https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/speech-synthesis
 Authorization: Bearer {access_token}
+x-sfdc-app-context: EinsteinGPT
+x-client-feature-id: external-edc
 
-{
-  "text": "The current weather in San Francisco is sunny...",
-  "voiceId": "xctasy8XvGp2cVO9HL9k",
-  "modelId": "eleven_turbo_v2_5"
-}
+Content-Type: multipart/form-data
+input: "The current weather in San Francisco is sunny..."
+request: {"engine":"elevenlabs","voice_id":"xctasy8XvGp2cVO9HL9k","language":"en"}
 ```
 
-**Returns:** Binary audio stream (MP3)
+**Response:**
+```json
+{
+  "contentType": "audio/mpeg",
+  "requestCharacters": 52,
+  "audioStream": "<base64-encoded MP3 data>"
+}
+```
+The base64 `audioStream` is decoded to a Buffer server-side and streamed to the frontend as `audio/mpeg`.
 
 ---
 
@@ -288,17 +324,20 @@ Backend (storage.ts)
 
 **Database Operations:**
 ```sql
--- Create conversation if new
-INSERT INTO conversations (session_id, created_at)
-VALUES ('abc123', NOW())
+-- Create conversation if new (id is a UUID, title is required)
+INSERT INTO conversations (title, status, created_at)
+VALUES ('New Conversation', 'active', NOW())
 
--- Insert user message
-INSERT INTO turns (conversation_id, role, content, created_at)
-VALUES (1, 'user', 'What's the weather like today?', NOW())
+-- Insert user message (role is 'user' or 'assistant')
+INSERT INTO turns (conversation_id, role, text, created_at)
+VALUES ('uuid-conv-id', 'user', 'What''s the weather like today?', NOW())
 
 -- Insert agent response
-INSERT INTO turns (conversation_id, role, content, created_at)
-VALUES (1, 'agent', 'The current weather in San Francisco...', NOW())
+INSERT INTO turns (conversation_id, role, text, created_at)
+VALUES ('uuid-conv-id', 'assistant', 'The current weather in San Francisco...', NOW())
+
+-- Update conversation with Agentforce session ID (for context continuity)
+UPDATE conversations SET session_id = 'sf-session-id' WHERE id = 'uuid-conv-id'
 ```
 
 ---
@@ -363,49 +402,64 @@ Identical flow but with separate credentials:
 ```sql
 -- Conversations: Top-level conversation sessions
 CREATE TABLE conversations (
-  id SERIAL PRIMARY KEY,
-  session_id TEXT UNIQUE NOT NULL,
-  salesforce_conversation_id TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'active',  -- 'active', 'completed', 'error'
+  session_id TEXT,  -- Agentforce session ID for context (nullable)
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- Turns: Individual messages in conversations
 CREATE TABLE turns (
-  id SERIAL PRIMARY KEY,
-  conversation_id INTEGER REFERENCES conversations(id),
-  role TEXT NOT NULL,  -- 'user' or 'agent'
-  content TEXT NOT NULL,
-  salesforce_message_id TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id VARCHAR NOT NULL REFERENCES conversations(id),
+  role VARCHAR NOT NULL,  -- 'user' or 'assistant'
+  text TEXT NOT NULL,
+  audio_url TEXT,  -- optional path to audio file
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- Users: Basic user tracking (minimal usage)
 CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
+  password TEXT NOT NULL
+);
+
+-- Settings: App configuration (single row with id = 'default')
+CREATE TABLE settings (
+  id VARCHAR PRIMARY KEY DEFAULT 'default',
+  voice VARCHAR NOT NULL DEFAULT 'allison',
+  language VARCHAR NOT NULL DEFAULT 'en-US',
+  stt_provider VARCHAR NOT NULL DEFAULT 'salesforce',  -- 'salesforce', 'browser'
+  tts_provider VARCHAR NOT NULL DEFAULT 'salesforce',  -- 'salesforce', 'browser'
+  agentforce_mode VARCHAR NOT NULL DEFAULT 'real'       -- 'stub', 'real'
 );
 ```
 
 ### Session Management
 
-**Session ID Generation:**
-```typescript
-// Generated on first conversation
-const sessionId = crypto.randomUUID(); // e.g., "123e4567-e89b-12d3-..."
+There are two distinct "session" concepts in this app:
 
-// Stored in browser localStorage
-localStorage.setItem('conversationSessionId', sessionId);
+**1. Conversation ID** (app-level, UUID)
+```typescript
+// Generated server-side when a new conversation is created (gen_random_uuid())
+// Stored in browser via safeStorage (localStorage wrapper):
+safeStorage.setItem('currentConversationId', conv.id);
 ```
 
+**2. Agentforce Session ID** (Salesforce API-level)
+- Created server-side by calling `POST /agents/{agentId}/sessions`
+- Stored in the `conversations.session_id` database column
+- Reused across messages in the same conversation to maintain context
+- Never exposed to the frontend directly
+
 **Conversation Lifecycle:**
-1. User opens app → Frontend generates session ID
-2. User sends first message → Backend creates conversation record
-3. Subsequent messages → Backend appends to existing conversation
-4. User closes app → Session ID persists in localStorage
-5. User returns → Loads previous conversation using session ID
+1. User opens app → Frontend looks up `currentConversationId` in storage
+2. User sends first message → Backend creates `conversations` row (UUID), then starts Agentforce session
+3. Subsequent messages → Backend reuses stored Agentforce `session_id` for context
+4. User closes app → Conversation UUID persists in `safeStorage`
+5. User returns → Loads previous conversation using stored UUID
 
 ---
 
@@ -415,14 +469,20 @@ localStorage.setItem('conversationSessionId', sessionId);
 
 ```
 App.tsx (Root)
-  └── VoiceChat.tsx (Main Interface)
-       ├── ChatHeader.tsx (Title, logo, controls)
-       ├── ConversationHistory (Scrollable messages)
-       │    └── MessageBubble.tsx (Each message)
-       │         └── AudioVisualizer.tsx (Waveform for audio)
-       └── VoiceRecordButton.tsx (Mic button with animations)
-            └── AnimatedRings (Visual feedback)
+  └── VoiceChat.tsx (Main Interface — all UI inline)
+       ├── <header> (Inline: title, logo, mode toggle, history, settings)
+       ├── <main> (Scrollable content area)
+       │    ├── Conversation mode: MessageBubble.tsx (each message)
+       │    │    └── MessageSkeleton.tsx (loading placeholders)
+       │    └── Voice-only mode: Ambient orb/halo (inline JSX)
+       ├── AgentTransparencyPanel.tsx (pipeline timing sidebar)
+       └── <footer>
+            ├── VoiceRecordButton.tsx (Mic button with animations)
+            │    └── AudioVisualizer.tsx (Live waveform while recording)
+            └── Text input row (inline)
 ```
+
+> Note: `ChatHeader.tsx` exists in the codebase as a standalone component but is not used by `VoiceChat.tsx` — the header is rendered inline. It is available in `client/src/components/examples/` as a reference.
 
 ### State Management
 
@@ -487,14 +547,17 @@ audio.play()
 
 **Visual Feedback States:**
 ```typescript
-// Blue: Recording/Processing user speech
-isRecording || isProcessing → Blue animated rings
+// Blue: Microphone is actively recording
+isRecording → Blue animated rings/halo
 
-// Yellow: Agent is thinking (waiting for response)
-isWaitingForAgent → Yellow pulsing rings
+// Amber/Yellow: STT processing (audio uploaded, waiting for transcription)
+isSttProcessing → Amber animated rings/halo
 
-// Green: Agent is speaking
-isAgentSpeaking → Green rippling rings
+// Purple: Agent is thinking (waiting for Agentforce response)
+isThinking → Purple animated rings/halo
+
+// Green: Agent is speaking (TTS audio playing)
+isSpeaking → Green animated rings/halo
 ```
 
 ---
@@ -538,66 +601,86 @@ isAgentSpeaking → Green rippling rings
 
 #### 1. Transcribe Speech to Text
 ```http
-POST /api/transcribe
+POST /api/stt
 Content-Type: multipart/form-data
 
-Body: audio file (WebM/MP4/M4A)
+Body: audio file field named "file" (WebM/MP4/M4A, max 10MB)
 
 Response:
 {
   "text": "Transcribed user speech",
-  "success": true
+  "duration": 0,
+  "transparency": {
+    "sttProcessingMs": 850,
+    "audioSizeBytes": 24320,
+    "mimeType": "audio/webm;codecs=opus"
+  }
 }
 ```
 
-#### 2. Send Message to Agent
+#### 2. Send Message to Agent (blocking)
 ```http
-POST /api/chat
+POST /api/agentforce
 Content-Type: application/json
 
 {
-  "message": "User's message text",
-  "sessionId": "unique-session-id"
+  "text": "User's message text",
+  "conversationId": "uuid-of-existing-conversation"
 }
 
 Response:
 {
-  "response": "Agent's text response",
-  "conversationId": "salesforce-conv-id",
-  "messageId": "salesforce-msg-id"
+  "text": "Agent's text response",
+  "conversationId": "uuid-of-conversation",
+  "sessionId": "sf-session-id",
+  "transparency": { ... }
 }
 ```
 
-#### 3. Synthesize Text to Speech
+#### 3. Send Message to Agent (streaming SSE)
 ```http
-GET /api/synthesize?text={message}&voice=allison
+POST /api/agentforce/stream
+Content-Type: application/json
+
+{
+  "text": "User's message text",
+  "conversationId": "uuid-of-existing-conversation"
+}
+
+Response: text/event-stream
+event: chunk
+data: {"text": "partial response..."}
+
+event: done
+data: {"text": "full response", "conversationId": "...", "sessionId": "...", "transparency": {...}}
+
+event: error
+data: {"error": "error message"}
+```
+
+#### 4. Synthesize Text to Speech
+```http
+GET /api/tts?text={message}&voice=allison
 
 Response: Binary audio stream (audio/mpeg)
 ```
+Also supports `POST /api/tts` with JSON body `{ "text": "...", "voice": "allison" }`.
 
-#### 4. Get Conversation History
+#### 5. Conversation Management
 ```http
-GET /api/conversations/:sessionId
+GET  /api/conversations           # list all conversations
+POST /api/conversations           # create new conversation
+GET  /api/conversations/:id       # get conversation by UUID
+PATCH /api/conversations/:id      # update title { "title": "New name" }
 
-Response:
-{
-  "id": 1,
-  "sessionId": "abc-123",
-  "turns": [
-    {
-      "id": 1,
-      "role": "user",
-      "content": "Hello",
-      "createdAt": "2024-01-15T10:00:00Z"
-    },
-    {
-      "id": 2,
-      "role": "agent",
-      "content": "Hi! How can I help?",
-      "createdAt": "2024-01-15T10:00:02Z"
-    }
-  ]
-}
+GET  /api/conversations/:id/turns # list turns for a conversation
+POST /api/conversations/:id/turns # create a turn { "role": "user", "text": "..." }
+```
+
+#### 6. Settings
+```http
+GET /api/settings   # get current settings
+PUT /api/settings   # update settings { "voice": "allison", "agentforceMode": "real", ... }
 ```
 
 ### Backend → Salesforce
@@ -624,49 +707,80 @@ Response:
 POST https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/transcriptions
 Authorization: Bearer {token}
 x-sfdc-app-context: EinsteinGPT
+x-client-feature-id: external-edc
 Content-Type: multipart/form-data
 
-file: [audio binary]
+input: [audio binary]
+engine: internal
+language: english
 
 Response:
 {
-  "text": "Transcribed speech"
+  "transcription": ["Transcribed speech text"]
 }
 ```
 
-#### 3. Agentforce Chat
+#### 3. Agentforce — Start Session
 ```http
-POST https://api.salesforce.com/einstein/ai-agent/v1/conversations/{sessionId}/messages
+POST https://api.salesforce.com/einstein/ai-agent/v1/agents/{agentId}/sessions
 Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "agentId": "{agent-id}",
-  "message": "User message",
-  "contextVariables": {}
+  "externalSessionKey": "{uuid}",
+  "instanceConfig": { "endpoint": "{instance_url}" },
+  "streamingCapabilities": { "chunkTypes": ["Text"] }
 }
 
 Response:
 {
-  "messageId": "msg-123",
-  "response": "Agent response text",
-  "conversationId": "conv-456"
+  "sessionId": "sf-session-id",
+  "externalSessionKey": "{uuid}"
 }
 ```
 
-#### 4. Text-to-Speech
+#### 4. Agentforce — Send Message
+```http
+POST https://api.salesforce.com/einstein/ai-agent/v1/sessions/{sessionId}/messages
+Authorization: Bearer {token}
+Content-Type: application/json
+Accept: text/event-stream  (for streaming) or application/json
+
+{
+  "message": {
+    "sequenceId": 1,
+    "type": "Text",
+    "text": "User message"
+  }
+}
+
+Response (JSON):
+{
+  "messages": [
+    { "message": "Agent response text", "type": "Text" }
+  ],
+  "sessionId": "sf-session-id",
+  "status": "Success"
+}
+```
+
+#### 5. Text-to-Speech
 ```http
 POST https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/speech-synthesis
 Authorization: Bearer {token}
-Content-Type: application/json
+x-sfdc-app-context: EinsteinGPT
+x-client-feature-id: external-edc
+Content-Type: multipart/form-data
 
+input: "Text to speak"
+request: {"engine":"elevenlabs","voice_id":"xctasy8XvGp2cVO9HL9k","language":"en"}
+
+Response:
 {
-  "text": "Text to speak",
-  "voiceId": "xctasy8XvGp2cVO9HL9k",
-  "modelId": "eleven_turbo_v2_5"
+  "contentType": "audio/mpeg",
+  "requestCharacters": 14,
+  "audioStream": "<base64-encoded MP3>"
 }
-
-Response: Binary audio stream (MP3)
 ```
 
 ---
@@ -684,11 +798,16 @@ Response: Binary audio stream (MP3)
 
 **How We Use It:**
 ```typescript
-// Send message to agent
-const response = await agentforceService.sendMessage(
-  sessionId,
-  userMessage
+// Conversation-based chat with session persistence
+const { response, sessionId, metadata } = await agentforceClient.chatWithAgentInConversation(
+  userMessage,
+  existingSessionId  // undefined for new conversations
 );
+
+// Or streaming via SSE (used by /api/agentforce/stream)
+for await (const event of agentforceClient.sendMessageStream(sessionId, userMessage)) {
+  if (event.type === 'chunk') process.stdout.write(event.text);
+}
 ```
 
 **Customer Value:**
@@ -708,11 +827,11 @@ const response = await agentforceService.sendMessage(
 
 **How We Use It:**
 ```typescript
-// Speech to Text
-const transcript = await speechService.transcribe(audioFile);
+// Speech to Text (via SpeechFoundationsClient)
+const transcript = await speechFoundationsClient.transcribeAudio(audioBuffer, mimeType, 'english');
 
-// Text to Speech
-const audioStream = await speechService.synthesize(text, 'allison');
+// Text to Speech (returns Buffer decoded from base64 JSON response)
+const audioBuffer = await speechFoundationsClient.synthesizeSpeech(text, voiceId);
 ```
 
 **Customer Value:**
@@ -768,7 +887,7 @@ const audioStream = await speechService.synthesize(text, 'allison');
 
 ### Real-time Feedback
 
-> "Watch the visual feedback - blue means the app is listening, yellow means the agent is thinking, green means the agent is speaking. This creates a natural, conversational flow just like talking to a real person."
+> "Watch the visual feedback - blue means the app is listening, amber means it's transcribing your speech, purple means the agent is thinking, green means the agent is speaking. This four-state pipeline creates a natural, conversational flow just like talking to a real person."
 
 ### Architecture Simplicity
 
@@ -895,18 +1014,20 @@ SALESFORCE_AGENT_ID=0Xx... # Your new agent ID
 **Restart required:** Yes (automatic on config change)
 
 #### 2. Change the Voice
-Edit `server/routes.ts`, line ~207:
+Edit `server/routes.ts`:
 ```typescript
 const voiceMapping: { [key: string]: string } = {
-  'allison': 'xctasy8XvGp2cVO9HL9k',  // Default: Millennial female
-  'shimmer': 'pNInz6obpgDQGcFmaJgB',  // Clear male
-  'onyx': 'VR6AewLTigWG4xSOukaG',     // Strong male
-  'echo': '21m00Tcm4TlvDq8ikWAM',     // Deep male
-  'nova': 'pMsXgVXv3BLzUgSXRplE',     // Expressive female
+  'shimmer':  'pNInz6obpgDQGcFmaJgB', // Adam - clear male voice
+  'alloy':    'JBFqnCBsd6RMkjVDRZzb', // George - mature male voice
+  'echo':     'TxGEqnHWrfWFTfGW9XjX', // Josh - deep male voice
+  'fable':    'AZnzlk1XvdvUeBnXmlld', // Domi - expressive female voice
+  'onyx':     'VR6AewLTigWG4xSOukaG', // Arnold - strong male voice
+  'nova':     'EXAVITQu4vr4xnSDxMaL', // Bella - expressive female voice
+  'allison':  'xctasy8XvGp2cVO9HL9k', // Allison - millennial female (default)
 };
 
-// Change default:
-const { text, voice = 'onyx' } = req.query; // Now uses Onyx
+// Change default (GET endpoint):
+const { text, voice = 'onyx' } = req.query; // Now uses Onyx instead of Allison
 ```
 
 #### 3. Adjust App Title/Branding
@@ -1019,10 +1140,14 @@ const response = await fetch(url, {
 heroku config -a your-app-name
 
 # Verify each variable is set:
-# - SALESFORCE_DOMAIN_URL
+# Agentforce connection:
+# - SALESFORCE_DOMAIN_URL        (e.g. https://yourorg.my.salesforce.com)
 # - SALESFORCE_CONSUMER_KEY
 # - SALESFORCE_CONSUMER_SECRET
 # - SALESFORCE_AGENT_ID
+
+# Speech Foundations connection (separate Connected App):
+# - SALESFORCE_SPEECH_DOMAIN_URL (may differ from Agentforce domain)
 # - SALESFORCE_SPEECH_CONSUMER_KEY
 # - SALESFORCE_SPEECH_CONSUMER_SECRET
 ```
@@ -1220,10 +1345,10 @@ If a customer deploys this, suggest tracking:
 Share these with customers as "art of the possible":
 
 **Short-term (Low Effort):**
-- Add conversation export (PDF, email transcript)
-- Multi-language support
-- Custom voice selection per user
-- Dark mode theme toggle
+- Add conversation export to PDF or email (text export already implemented)
+- Multi-language support (language is configurable in settings)
+- Custom voice selection per user (voice setting already exists)
+- Dark mode — already implemented via Settings toggle
 
 **Medium-term (Moderate Effort):**
 - Salesforce authentication (only employees can access)
@@ -1232,7 +1357,7 @@ Share these with customers as "art of the possible":
 - Admin dashboard for usage analytics
 
 **Long-term (Higher Effort):**
-- Real-time streaming (like ChatGPT)
+- Real-time streaming TTS (start speaking before full text is received) — SSE text streaming is already implemented
 - Voice biometrics for authentication
 - Multi-modal (voice + screen sharing + documents)
 - Telephony integration (call in to your agent)
