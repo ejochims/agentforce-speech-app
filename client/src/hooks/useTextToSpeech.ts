@@ -63,12 +63,6 @@ export function useTextToSpeech() {
     audio.volume = 1.0;
 
     return new Promise((resolve) => {
-      const cleanup = () => {
-        audio.removeEventListener('canplay', onCanPlay);
-        audio.removeEventListener('error', onError);
-        audio.removeEventListener('ended', onEnded);
-      };
-
       const onCanPlay = () => {
         console.log('🎵 Audio canplay, attempting playback...');
         audio.play()
@@ -103,9 +97,26 @@ export function useTextToSpeech() {
         cleanup();
       };
 
+      // Safari iOS sometimes skips the 'ended' event for streamed audio.
+      // Listening to 'pause' with audio.ended === true catches this case.
+      const onPause = () => {
+        if (audio.ended) {
+          console.log('✓ Audio ended via pause fallback (Safari iOS)');
+          onEnded();
+        }
+      };
+
+      const cleanup = () => {
+        audio.removeEventListener('canplay', onCanPlay);
+        audio.removeEventListener('error', onError);
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('pause', onPause);
+      };
+
       audio.addEventListener('canplay', onCanPlay);
       audio.addEventListener('error', onError);
       audio.addEventListener('ended', onEnded);
+      audio.addEventListener('pause', onPause);
 
       setTimeout(() => {
         if (audio.readyState === 0) {
