@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil } from 'lucide-react';
+import { Mic, Phone, Settings, Download, Loader2, MessageCircle, History, Plus, Send, Calendar, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -24,7 +24,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import VoiceRecordButton from './VoiceRecordButton';
 import MessageBubble from './MessageBubble';
 import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
@@ -35,6 +34,8 @@ import { useAudioRecorder, type SttTransparency } from '@/hooks/useAudioRecorder
 import { useAgentStream } from '@/hooks/useAgentStream';
 import { usePipelineTransparency } from '@/hooks/usePipelineTransparency';
 import { useConversation } from '@/hooks/useConversation';
+import { useWakeWord } from '@/hooks/useWakeWord';
+import VoiceRecordButton, { type VoiceRecordButtonHandle } from './VoiceRecordButton';
 import type { Conversation, Turn } from '@shared/schema';
 
 const agentforceLogo = '/agentforce-logo.png';
@@ -57,6 +58,12 @@ export default function VoiceChat() {
   const [showVoiceHint, setShowVoiceHint] = useState(
     () => !localStorage.getItem('voiceHintSeen')
   );
+  const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
+    () => localStorage.getItem('wakeWordEnabled') === 'true'
+  );
+
+  // Ref to VoiceRecordButton so the wake word handler can start recording programmatically
+  const voiceRecordRef = useRef<VoiceRecordButtonHandle>(null);
 
   // ─── Scroll tracking ──────────────────────────────────────────────────────
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -248,6 +255,22 @@ export default function VoiceChat() {
   const isThinking = agentStream.agentPending || agentStream.isAgentStreaming;
   const isSpeaking = tts.isAudioPlaying;
 
+  // Pipeline is considered busy whenever the app is actively recording,
+  // transcribing, waiting for the agent, or playing back audio.
+  // Wake word detection is paused during these states.
+  const isPipelineBusy = isRecording || isSttProcessing || isThinking || isSpeaking;
+
+  const { isSupported: wakeWordSupported, isListening: wakeWordListening } = useWakeWord({
+    enabled: wakeWordEnabled,
+    isPipelineBusy,
+    onDetected: useCallback(async () => {
+      if (!voiceRecordRef.current) return;
+      // VoiceRecordButton.startRecording() calls onBeforeRecording (stops TTS +
+      // unlocks Safari audio) and then onRecordingStart — same path as a button tap.
+      voiceRecordRef.current.startRecording();
+    }, []),
+  });
+
 
   const glowHalo = isRecording    ? 'rgba(59,130,246,0.40)'
     : isSttProcessing ? 'rgba(245,158,11,0.35)'
@@ -305,6 +328,14 @@ export default function VoiceChat() {
               </span>
             )}
           </div>
+
+          {/* Wake word active indicator */}
+          {wakeWordListening && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 border-violet-200 text-violet-700 select-none">
+              <Radio className="w-2.5 h-2.5 animate-pulse" />
+              Hey Agentforce
+            </span>
+          )}
 
           {/* Header Actions */}
           <div className="flex items-center gap-sm">
@@ -537,6 +568,30 @@ export default function VoiceChat() {
                         localStorage.setItem('showConversation', String(checked));
                       }}
                       data-testid="toggle-conversation"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between space-x-4">
+                    <Label
+                      htmlFor="wake-word"
+                      className={`flex flex-col space-y-1 ${!wakeWordSupported ? 'opacity-50' : ''}`}
+                    >
+                      <span className="text-sm font-medium">Wake Word</span>
+                      <span className="text-xs text-muted-foreground">
+                        {wakeWordSupported
+                          ? "Say \"Hey Agentforce\" to start recording"
+                          : 'Not supported in this browser'}
+                      </span>
+                    </Label>
+                    <Switch
+                      id="wake-word"
+                      checked={wakeWordEnabled}
+                      disabled={!wakeWordSupported}
+                      onCheckedChange={(checked) => {
+                        setWakeWordEnabled(checked);
+                        localStorage.setItem('wakeWordEnabled', String(checked));
+                      }}
+                      data-testid="toggle-wake-word"
                     />
                   </div>
                 </div>
@@ -876,7 +931,9 @@ export default function VoiceChat() {
                                   'Ready'}
               </p>
               {!isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
-                <p className="text-sm text-gray-300">Tap the mic to start</p>
+                <p className="text-sm text-gray-300">
+                  {wakeWordListening ? 'Say "Hey Agentforce" or tap the mic' : 'Tap the mic to start'}
+                </p>
               )}
               <AnimatePresence>
                 {showVoiceHint && !isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
@@ -992,6 +1049,7 @@ export default function VoiceChat() {
                 aria-busy={recorder.recordingState === 'processing'} role="group" aria-label="Voice recording"
               >
                 <VoiceRecordButton
+                  ref={voiceRecordRef}
                   onBeforeRecording={async () => { tts.stopAudio(); await tts.unlockAudioForSafari(); }}
                   onRecordingStart={handleFirstRecordingStart}
                   onRecordingStop={recorder.handleRecordingStop}
