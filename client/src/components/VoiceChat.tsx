@@ -508,18 +508,6 @@ export default function VoiceChat() {
               <Plus className="w-4 h-4" />
             </Button>
 
-            {/* Audio Toggle Button */}
-            <Button
-              size="icon"
-              variant="ghost"
-              className="rounded-full"
-              onClick={() => tts.audioEnabled ? tts.disableAudio() : tts.initializeAudio()}
-              data-testid={`button-audio-${tts.audioEnabled ? 'enabled' : 'disabled'}`}
-              title={tts.audioEnabled ? 'Disable voice responses' : 'Enable voice responses'}
-            >
-              {tts.audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </Button>
-
             <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -540,6 +528,23 @@ export default function VoiceChat() {
                 </SheetHeader>
 
                 <div className="space-y-6 mt-6">
+                  <div className="flex items-center justify-between space-x-4">
+                    <Label htmlFor="voice-responses" className="flex flex-col space-y-1">
+                      <span className="text-sm font-medium">Voice Responses</span>
+                      <span className="text-xs text-muted-foreground">
+                        Speak agent replies aloud
+                      </span>
+                    </Label>
+                    <Switch
+                      id="voice-responses"
+                      checked={tts.audioEnabled}
+                      onCheckedChange={(checked) => {
+                        checked ? tts.initializeAudio() : tts.disableAudio();
+                      }}
+                      data-testid="toggle-voice-responses"
+                    />
+                  </div>
+
                   <div className="flex items-center justify-between space-x-4">
                     <Label
                       htmlFor="wake-word"
