@@ -267,7 +267,9 @@ export default function VoiceChat() {
       if (!voiceRecordRef.current) return;
       // VoiceRecordButton.startRecording() calls onBeforeRecording (stops TTS +
       // unlocks Safari audio) and then onRecordingStart — same path as a button tap.
-      voiceRecordRef.current.startRecording();
+      // silenceTimeoutMs enables VAD auto-stop so the user doesn't need to
+      // manually tap the button after speaking their wake-word utterance.
+      voiceRecordRef.current.startRecording({ silenceTimeoutMs: 1800 });
     }, []),
   });
 
