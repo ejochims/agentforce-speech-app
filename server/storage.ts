@@ -135,7 +135,7 @@ export class MemStorage implements IStorage {
     if (!this.settings) {
       this.settings = {
         id: "default",
-        voice: "alloy",
+        voice: "allison",
         language: "en-US",
         sttProvider: "salesforce",
         ttsProvider: "salesforce",
