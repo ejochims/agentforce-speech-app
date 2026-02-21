@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Zap, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
+import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -55,9 +55,7 @@ export default function VoiceChat() {
   );
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
-  const [showVoiceHint, setShowVoiceHint] = useState(
-    () => !localStorage.getItem('voiceHintSeen')
-  );
+  const [showVoiceHint] = useState(false); // retired — welcome state covers this
   const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
     () => localStorage.getItem('wakeWordEnabled') === 'true'
   );
@@ -160,15 +158,6 @@ export default function VoiceChat() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHistoryOpen, recorder.isRecording]);
 
-  // Auto-dismiss voice hint after 5s
-  useEffect(() => {
-    if (!showVoiceHint || showConversation) return;
-    const t = setTimeout(() => {
-      setShowVoiceHint(false);
-      localStorage.setItem('voiceHintSeen', '1');
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [showVoiceHint, showConversation]);
 
   // ─── Event handlers ───────────────────────────────────────────────────────
   const handleTextMessage = async () => {
@@ -201,7 +190,6 @@ export default function VoiceChat() {
     transparency.clearEvents();
     setTextMessage('');
     setShowTextInput(false);
-    setShowVoiceHint(false);
   };
 
   const handleExportTranscript = () => {
@@ -233,10 +221,6 @@ export default function VoiceChat() {
   };
 
   const handleFirstRecordingStart = () => {
-    if (showVoiceHint) {
-      setShowVoiceHint(false);
-      localStorage.setItem('voiceHintSeen', '1');
-    }
     recorder.handleRecordingStart();
   };
 
@@ -355,6 +339,23 @@ export default function VoiceChat() {
 
           {/* Header Actions */}
           <div className="flex items-center gap-sm">
+            {/* Conversation / Voice-only mode toggle */}
+            <Button
+              size="icon"
+              variant="ghost"
+              className={`rounded-full ${showConversation ? 'text-primary bg-primary/10' : ''}`}
+              onClick={() => {
+                const next = !showConversation;
+                setShowConversation(next);
+                localStorage.setItem('showConversation', String(next));
+              }}
+              title={showConversation ? 'Switch to voice-only mode' : 'Show conversation'}
+              aria-label={showConversation ? 'Switch to voice-only mode' : 'Show conversation'}
+              data-testid="button-toggle-conversation-mode"
+            >
+              {showConversation ? <MessageCircle className="w-4 h-4" /> : <Radio className="w-4 h-4" />}
+            </Button>
+
             <Drawer open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
               <DrawerTrigger asChild>
                 <Button
@@ -539,24 +540,6 @@ export default function VoiceChat() {
                 </SheetHeader>
 
                 <div className="space-y-6 mt-6">
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label htmlFor="show-conversation" className="flex flex-col space-y-1">
-                      <span className="text-sm font-medium">Show Conversation</span>
-                      <span className="text-xs text-muted-foreground">
-                        Display chat messages or voice-only mode
-                      </span>
-                    </Label>
-                    <Switch
-                      id="show-conversation"
-                      checked={showConversation}
-                      onCheckedChange={(checked) => {
-                        setShowConversation(checked);
-                        localStorage.setItem('showConversation', String(checked));
-                      }}
-                      data-testid="toggle-conversation"
-                    />
-                  </div>
-
                   <div className="flex items-center justify-between space-x-4">
                     <Label
                       htmlFor="wake-word"
@@ -953,20 +936,6 @@ export default function VoiceChat() {
                   {wakeWordListening ? 'Say "Hey Agentforce" or tap the mic' : 'Tap the mic to start'}
                 </p>
               )}
-              <AnimatePresence>
-                {showVoiceHint && !isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
-                  <motion.p
-                    key="voice-hint"
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.4 }}
-                    className="text-xs text-gray-300 mt-1"
-                  >
-                    Tap the mic button to begin
-                  </motion.p>
-                )}
-              </AnimatePresence>
               {conversation.turns.length > 0 && !isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
                 <button
                   onClick={handleStartNewChat}
@@ -1006,12 +975,19 @@ export default function VoiceChat() {
 
       {/* Voice Composer */}
       <footer className={`app-footer transition-all duration-200 ${showTransparency ? 'md:pr-80' : ''} ${!showConversation ? '!border-t-0 !bg-transparent !backdrop-blur-none' : ''} ${showConversation && conversation.turns.length === 0 ? '!border-t-0' : ''}`}>
-        <div className="px-lg pt-lg pb-lg keyboard-aware">
-          <div className="flex flex-col gap-lg">
-            {/* Text Input Field */}
+        <div className="px-lg pt-md pb-lg keyboard-aware">
+
+          {/* Text Input — slides in above the mic row, never shifts mic position */}
+          <AnimatePresence>
             {showTextInput && (
-              <div className="transition-all duration-300 ease-in-out">
-                <div className="flex gap-md items-end">
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="flex gap-md items-end pb-md">
                   <Input
                     value={textMessage}
                     onChange={(e) => setTextMessage(e.target.value)}
@@ -1026,6 +1002,7 @@ export default function VoiceChat() {
                     className="flex-1 h-12 rounded-full px-lg text-base touch-target"
                     data-testid="input-text-message"
                     aria-label="Type your message"
+                    autoFocus
                   />
                   <Button
                     onClick={handleTextMessage}
@@ -1043,25 +1020,40 @@ export default function VoiceChat() {
                     )}
                   </Button>
                 </div>
-              </div>
+              </motion.div>
             )}
+          </AnimatePresence>
 
-            {/* Voice Interface */}
-            <div className="flex flex-col items-center gap-lg">
-              {/* Stop Speaking — shown when TTS audio is active */}
-              {tts.isAudioPlaying && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={tts.stopAudio}
-                  className="rounded-full h-9 px-lg text-sm text-green-600 dark:text-green-400 border-green-500/40 hover:bg-green-500/10 gap-sm"
-                  aria-label="Stop speaking"
-                >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  Stop Speaking
-                </Button>
-              )}
+          {/* Mic row — 3-column grid so mic stays centered regardless of flanking controls */}
+          <div className="grid grid-cols-3 items-center">
 
+            {/* Left: Stop Speaking */}
+            <div className="flex items-center justify-start">
+              <AnimatePresence>
+                {tts.isAudioPlaying && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -8 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={tts.stopAudio}
+                      className="rounded-full h-9 px-md text-sm text-green-600 dark:text-green-400 border-green-500/40 hover:bg-green-500/10 gap-sm"
+                      aria-label="Stop speaking"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                      Stop
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Center: Mic button */}
+            <div className="flex flex-col items-center gap-sm">
               <div
                 style={!showConversation ? { filter: micDropShadow, transition: 'filter 0.7s ease' } : undefined}
                 aria-busy={recorder.recordingState === 'processing'} role="group" aria-label="Voice recording"
@@ -1078,35 +1070,39 @@ export default function VoiceChat() {
                   onRetry={recorder.resetError}
                   showStatusText={showConversation}
                 />
-                {/* Processing indicator - Only show in conversation mode */}
+                {/* Processing indicator — conversation mode only */}
                 {recorder.recordingState === 'processing' && showConversation && (
                   <div className="text-center mt-sm" role="status" aria-live="polite">
                     <div className="flex items-center justify-center gap-sm text-sm text-muted-foreground">
                       <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                      <span>Processing audio...</span>
+                      <span>Processing...</span>
                     </div>
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Text Input Toggle */}
+            {/* Right: Type instead toggle */}
+            <div className="flex items-center justify-end">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => setShowTextInput(!showTextInput)}
-                className={`touch-target h-9 px-md rounded-full text-xs transition-all duration-200 ${
-                  !showConversation
-                    ? 'border-gray-200 text-gray-400 bg-transparent hover:border-gray-300 hover:text-gray-600 hover:bg-transparent'
+                className={`touch-target h-9 w-9 rounded-full transition-all duration-200 ${
+                  showTextInput
+                    ? 'text-primary bg-primary/10'
+                    : !showConversation
+                    ? 'text-gray-400 hover:text-gray-600'
                     : 'text-muted-foreground'
                 }`}
                 data-testid="button-toggle-text-input"
                 aria-label={showTextInput ? 'Hide text input' : 'Show text input'}
                 aria-expanded={showTextInput}
               >
-                <Pencil className="w-3 h-3 mr-1.5" aria-hidden="true" />
-                {showTextInput ? 'Hide keyboard' : 'Type instead'}
+                <Pencil className="w-4 h-4" aria-hidden="true" />
               </Button>
             </div>
+
           </div>
         </div>
       </footer>
