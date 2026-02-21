@@ -3,6 +3,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatRelativeTime } from '@/lib/time';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const agentforceLogo = '/agentforce-logo.png';
 
@@ -152,9 +154,17 @@ export default function MessageBubble({
             </div>
           ) : (
             <div className="flex flex-col gap-xs">
-              <p className="text-base leading-relaxed whitespace-pre-wrap" aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}>
-                {message}
-              </p>
+              {isUser ? (
+                <p className="text-base leading-relaxed whitespace-pre-wrap" aria-describedby={formattedTimestamp ? `timestamp-${isUser ? 'user' : 'agent'}` : undefined}>
+                  {message}
+                </p>
+              ) : (
+                <div className="text-base leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-pre:bg-muted prose-pre:p-3 prose-pre:rounded-lg prose-pre:text-sm prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:italic prose-a:text-primary prose-a:underline prose-strong:font-semibold prose-p:leading-relaxed" aria-describedby={formattedTimestamp ? `timestamp-agent` : undefined}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message}
+                  </ReactMarkdown>
+                </div>
+              )}
 
               {/* Waveform indicator when this message's audio is playing */}
               {isPlaying && !isUser && (
