@@ -987,7 +987,7 @@ export default function VoiceChat() {
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="overflow-hidden"
               >
-                <div className="flex gap-md items-end pb-md">
+                <div className="flex gap-md items-end pb-md px-px">
                   <Input
                     value={textMessage}
                     onChange={(e) => setTextMessage(e.target.value)}
