@@ -517,9 +517,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settingsData = insertSettingsSchema.parse(req.body);
       const settings = await storage.updateSettings(settingsData);
       res.json(settings);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating settings:', error);
-      res.status(500).json({ error: 'Failed to update settings' });
+      if (error.name === 'ZodError') {
+        res.status(400).json({ error: 'Invalid settings data', details: error.errors });
+      } else {
+        res.status(500).json({ error: 'Failed to update settings' });
+      }
     }
   });
 

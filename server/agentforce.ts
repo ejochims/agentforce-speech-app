@@ -50,6 +50,8 @@ export class AgentforceClient {
   private instanceUrl: string | null = null;
   // Serialises concurrent token refreshes — only one OAuth request in flight at a time
   private tokenRefreshPromise: Promise<string> | null = null;
+  // Tracks the next sequenceId to use per active session
+  private sessionSequenceIds: Map<string, number> = new Map();
 
   private configured = false;
 
@@ -170,7 +172,11 @@ export class AgentforceClient {
 
   async startSession(externalSessionKey?: string): Promise<string> {
     const sessionKey = externalSessionKey || randomUUID();
-    
+
+    // Ensure the token (and instanceUrl) is fetched before building the payload
+    // so the instanceConfig.endpoint always reflects the OAuth-authorised instance.
+    await this.getAccessToken();
+
     const payload = {
       externalSessionKey: sessionKey,
       instanceConfig: {
@@ -187,9 +193,11 @@ export class AgentforceClient {
   }
 
   async sendMessage(sessionId: string, message: string): Promise<{ text: string; rawResponse: AgentforceMessageResponse }> {
+    const sequenceId = this.sessionSequenceIds.get(sessionId) ?? 1;
+    this.sessionSequenceIds.set(sessionId, sequenceId + 1);
     const payload = {
       message: {
-        sequenceId: 1,
+        sequenceId,
         type: "Text",
         text: message
       }
@@ -225,6 +233,9 @@ export class AgentforceClient {
     const accessToken = await this.getAccessToken();
     const url = `https://api.salesforce.com/einstein/ai-agent/v1/sessions/${sessionId}/messages`;
 
+    const sequenceId = this.sessionSequenceIds.get(sessionId) ?? 1;
+    this.sessionSequenceIds.set(sessionId, sequenceId + 1);
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -233,7 +244,7 @@ export class AgentforceClient {
         'Accept': 'text/event-stream',
       },
       body: JSON.stringify({
-        message: { sequenceId: 1, type: 'Text', text: message },
+        message: { sequenceId, type: 'Text', text: message },
       }),
     });
 
@@ -294,10 +305,12 @@ export class AgentforceClient {
   async endSession(sessionId: string): Promise<boolean> {
     try {
       await this.makeApiCall(`/sessions/${sessionId}`, 'DELETE');
+      this.sessionSequenceIds.delete(sessionId);
       console.log('Session ended successfully:', sessionId);
       return true;
     } catch (error) {
       console.error('Failed to end session:', error);
+      this.sessionSequenceIds.delete(sessionId);
       return false;
     }
   }

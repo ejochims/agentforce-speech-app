@@ -23,6 +23,8 @@ export class SpeechFoundationsClient {
   private consumerSecret: string;
   private accessToken: string | null = null;
   private tokenExpiry: number | null = null;
+  // Serialises concurrent token refreshes — only one OAuth request in flight at a time
+  private tokenRefreshPromise: Promise<string> | null = null;
 
   private configured = false;
 
@@ -56,11 +58,21 @@ export class SpeechFoundationsClient {
 
   private async getAccessToken(): Promise<string> {
     this.ensureConfigured();
-    // Check if we have a valid token
+    // Fast path — valid token already cached
     if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
       return this.accessToken;
     }
+    // If a refresh is already in flight, wait for it instead of issuing a second one
+    if (this.tokenRefreshPromise) {
+      return this.tokenRefreshPromise;
+    }
+    this.tokenRefreshPromise = this.fetchNewToken().finally(() => {
+      this.tokenRefreshPromise = null;
+    });
+    return this.tokenRefreshPromise;
+  }
 
+  private async fetchNewToken(): Promise<string> {
     const url = `${this.domainUrl}/services/oauth2/token`;
     const body = new URLSearchParams({
       grant_type: 'client_credentials',
@@ -84,7 +96,7 @@ export class SpeechFoundationsClient {
 
       const data: SpeechTokenResponse = await response.json();
       this.accessToken = data.access_token;
-      
+
       // Set token expiry to 25 minutes from now (tokens are valid for 30 minutes)
       this.tokenExpiry = Date.now() + 25 * 60 * 1000;
 

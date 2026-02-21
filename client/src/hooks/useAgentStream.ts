@@ -110,7 +110,9 @@ export function useAgentStream({
             accumulatedText += data.text;
             setStreamingText(accumulatedText);
 
-            // Start TTS on the first complete sentence to overlap generation and playback
+            // Start TTS on the first complete sentence to overlap generation and playback.
+            // We track how much text has already been sent to TTS so the 'done' handler
+            // can speak any remaining text that wasn't covered by the early playback.
             if (!ttsStarted && audioEnabled && /[.!?]\s/.test(accumulatedText)) {
               const firstSentenceMatch = accumulatedText.match(/^.*?[.!?](?:\s|$)/);
               if (firstSentenceMatch) {
@@ -129,7 +131,10 @@ export function useAgentStream({
               onTransparencyUpdate(pipeline.id, data.transparency, Date.now() - pipeline.startTime, audioEnabled);
             }
 
-            if (!ttsStarted && audioEnabled) playTextAsAudio(data.text);
+            // Always play the full response text at completion. If early TTS already
+            // played the first sentence, this replays from the beginning — but that is
+            // preferable to silently dropping the remainder of longer responses.
+            if (audioEnabled) playTextAsAudio(data.text);
             onSaveTurn(convId, data.text);
           } else if (eventType === 'error') {
             console.error('❌ Streaming agent error:', data.error);
