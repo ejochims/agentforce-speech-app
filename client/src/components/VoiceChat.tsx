@@ -297,8 +297,22 @@ export default function VoiceChat() {
     : 'drop-shadow(0 0 10px rgba(59,130,246,0.22))';
 
   // ─── Render ───────────────────────────────────────────────────────────────
+
+  // Subtle full-screen ambient tint for voice mode — eliminates the hard line
+  // where the orb's local halos fade out before reaching the footer.
+  const shellTint = !showConversation
+    ? isRecording    ? 'rgba(59,130,246,0.06)'
+      : isSttProcessing ? 'rgba(245,158,11,0.05)'
+      : isThinking      ? 'rgba(168,85,247,0.06)'
+      : isSpeaking      ? 'rgba(34,197,94,0.05)'
+      :                   'transparent'
+    : undefined;
+
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      style={shellTint !== undefined ? { backgroundColor: shellTint, transition: 'background-color 700ms ease' } : undefined}
+    >
       {/* Mobile App Header */}
       <header className="app-header" role="banner">
         <div className="flex items-center justify-between px-lg py-sm">
