@@ -67,45 +67,9 @@ Tests (Vitest)
 
 ---
 
-## Technical Decisions Worth Noting
+## SE Guide
 
-**SSE streaming with graceful fallback.** The `/api/agentforce/stream` endpoint exposes Agentforce responses as Server-Sent Events. The client streams chunks in real time, showing text as it arrives. If the SSE endpoint is unavailable or returns an error event, the client transparently falls back to the blocking `/api/agentforce` endpoint. Conversation expiry (404) triggers automatic session recovery rather than an error state.
-
-**Early TTS latency optimization.** Rather than waiting for the full agent response before starting text-to-speech, the streaming client watches for the first complete sentence (ending in `.`, `!`, or `?`) and fires TTS immediately. For responses longer than a sentence, the user hears audio start while generation continues — cutting perceived latency significantly.
-
-**Dual independent OAuth2 connections.** The Agentforce API and Speech Foundations API each use a separate OAuth2 client credentials flow with their own Connected App credentials. Tokens are cached in memory with a 25-minute expiry and refreshed automatically. Credentials are never exposed to the frontend; all Salesforce communication is server-to-server.
-
-**Agent Transparency Panel.** A collapsible sidebar (bottom sheet on mobile, side panel on desktop) surfaces the full pipeline for every interaction: STT processing time and audio size, Agentforce session ID and whether a new session was created, agent processing time, response message count and types from the raw Salesforce API response, and an expandable raw JSON viewer. This was built specifically for technical demo reviews where buyers want to see what's actually happening under the hood.
-
-**iOS Safari audio handling.** iOS requires an audio context unlock during a user gesture before `HTMLAudioElement.play()` can be called programmatically. The recording button fires `unlockAudioForSafari()` on `onBeforeRecording`. Recording uses WebM/Opus where available, with M4A fallback for Safari. A single "blessed" audio element ref is reused for TTS playback to avoid iOS autoplay restrictions.
-
-**Storage interface abstraction.** `IStorage` defines all CRUD operations; the default export is `MemStorage` (in-memory Maps — zero dependencies, works without a database configured). Swapping to PostgreSQL requires only implementing `IStorage` and replacing the export. This made local development and testing straightforward without requiring a running database.
-
----
-
-## Agent Design Considerations
-
-Not all Agentforce agents work equally well in voice contexts. Before deploying, review [`AGENT_TYPES_AND_CONSIDERATIONS.md`](./AGENT_TYPES_AND_CONSIDERATIONS.md) — it covers:
-
-- Which agent types are suited for voice vs. chat (Service Agent vs. Employee Agent, and why)
-- How to tune agent instructions for spoken responses (concise, no markdown, natural sentence structure)
-- Latency tradeoffs between model quality and response speed
-- What breaks in voice that looks fine in a chat UI
-
----
-
-## Demo Tips
-
-**Voice-Only Mode** (most impressive for live demos): Toggle off "Show Conversation" to show only the visual feedback animation. Clean, theatrical, immediately understandable to a non-technical executive audience.
-
-**Hybrid Mode** (better for technical reviews): Keep the conversation log visible to show persistence, context retention, and full interaction history.
-
-**Transparency Mode** (for technical buyers): Open the Agent Transparency Panel to show real-time pipeline timing, session management, and raw Salesforce API responses. Makes the "how does this work" conversation concrete.
-
-**Before any demo:**
-- Visit your Heroku URL 15 minutes early to wake the dyno
-- Test end-to-end on the actual device you'll demo on
-- Prepare 3–5 questions tuned to your agent's configured topics
+For a deep dive on architecture, data flow, agent types, customization, demo talking points, customer Q&A, troubleshooting, and development setup, see [`SE_GUIDE.md`](./SE_GUIDE.md).
 
 ---
 
@@ -311,7 +275,7 @@ Click **Deploy to Heroku** again. Each deployment is fully independent with its 
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md). Issues and PRs welcome.
+See [`SE_GUIDE.md`](./SE_GUIDE.md) for development setup, project structure, and contribution guidelines. Issues and PRs welcome.
 
 ---
 
