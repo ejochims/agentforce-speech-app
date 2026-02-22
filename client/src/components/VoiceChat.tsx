@@ -257,7 +257,8 @@ export default function VoiceChat() {
   // ─── Ambient voice mode computed values ──────────────────────────────────
   const isRecording = recorder.recordingState === 'recording';
   const isSttProcessing = recorder.recordingState === 'processing';
-  const isThinking = agentStream.agentPending || agentStream.isAgentStreaming;
+  const hasPendingAgentTrigger = [...conversation.pendingMessages.values()].some(m => m.state === 'sending');
+  const isThinking = agentStream.agentPending || agentStream.isAgentStreaming || hasPendingAgentTrigger;
   const isSpeaking = tts.isAudioPlaying;
 
   // Latch thinking state so the orb never flickers to idle between thinking→speaking.
