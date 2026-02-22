@@ -47,7 +47,7 @@ export function useTextToSpeech() {
 
     setIsTtsFetching(true);
     console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
-    const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison&_t=${Date.now()}`;
+    const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison`;
 
     let audio: HTMLAudioElement;
     if (blessedAudioRef.current) {
@@ -132,7 +132,7 @@ export function useTextToSpeech() {
           cleanup();
           resolve(false);
         }
-      }, 5000);
+      }, 3000);
     });
   }, []); // stable — reads audioEnabled via ref
 

@@ -11,6 +11,7 @@ import {
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // Configure multer for audio file uploads
 const upload = multer({
@@ -158,8 +159,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filename: req.file.filename
       });
 
-      // Read audio file
-      const audioBuffer = fs.readFileSync(req.file.path);
+      // Read audio file (async to avoid blocking the event loop)
+      const audioBuffer = await fs.promises.readFile(req.file.path);
 
       // Use Einstein Transcribe
       const transcription = await speechFoundationsClient.transcribeAudio(
@@ -169,7 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       // Clean up uploaded file
-      fs.unlinkSync(req.file.path);
+      await fs.promises.unlink(req.file.path);
 
       const sttMs = Date.now() - sttStart;
 
@@ -186,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error transcribing audio:', error);
       // Clean up file even on error
       if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+        await fs.promises.unlink(req.file.path);
       }
       
       // Provide detailed error message based on error type
@@ -228,24 +229,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/tts', async (req, res) => {
     try {
       const { text, voice = 'allison' } = req.query;
-      
+
       if (!text || typeof text !== 'string') {
         return res.status(400).json({ error: 'Text is required' });
       }
 
       // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice as string] || voiceMapping['allison'];
-      
+
+      // Compute a stable ETag from the input so identical requests are served from
+      // browser cache without hitting Einstein Speech at all.
+      const etag = `"${crypto.createHash('sha1').update(text + (voice as string)).digest('hex')}"`;
+      if (req.headers['if-none-match'] === etag) {
+        return res.status(304).end();
+      }
+
       // Use Einstein Speech to synthesize
       const audioBuffer = await speechFoundationsClient.synthesizeSpeech(text, voiceId);
 
-      // Stream the audio response
+      // Cache for 1 hour — TTS output is deterministic for a given (text, voice) pair
       res.set({
         'Content-Type': 'audio/mpeg',
         'Content-Length': audioBuffer.length.toString(),
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'public, max-age=3600',
+        'ETag': etag,
       });
-      
+
       res.send(audioBuffer);
     } catch (error) {
       console.error('Error generating speech:', error);
