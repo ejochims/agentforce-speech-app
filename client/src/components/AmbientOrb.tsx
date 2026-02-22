@@ -148,11 +148,6 @@ export default function AmbientOrb({ state, logoSrc, size = 192 }: AmbientOrbPro
       ctx.fillStyle = ig;
       ctx.fill();
 
-      // Thin stroke gives the blob a crisp edge
-      ctx.strokeStyle = `rgba(${ri},${gi},${bi},0.50)`;
-      ctx.lineWidth   = 1;
-      ctx.stroke();
-
       rafRef.current = requestAnimationFrame(draw);
     }
 
