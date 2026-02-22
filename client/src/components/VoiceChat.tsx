@@ -69,6 +69,9 @@ export default function VoiceChat() {
   const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
     () => safeStorage.getItem('wakeWordEnabled') === 'true'
   );
+  const [autoListen, setAutoListen] = useState<boolean>(
+    () => safeStorage.getItem('autoListen') === 'true'
+  );
   const [darkMode, setDarkMode] = useState<boolean>(
     () => safeStorage.getItem('darkMode') === 'true'
   );
@@ -282,6 +285,20 @@ export default function VoiceChat() {
   }, [isThinking, isSpeaking]);
 
   const effectivelyThinking = isThinking || thinkingLatch;
+
+  // Auto-listen: when speaking ends, automatically open the mic for the next turn.
+  // Only fires when the user has opted in and nothing else is running.
+  const prevIsSpeakingRef = useRef(false);
+  useEffect(() => {
+    const wasSpeaking = prevIsSpeakingRef.current;
+    prevIsSpeakingRef.current = isSpeaking;
+    if (wasSpeaking && !isSpeaking && autoListen && !isRecording && !isSttProcessing && !isThinking) {
+      const t = setTimeout(() => {
+        voiceRecordRef.current?.startRecording({ silenceTimeoutMs: 1800 });
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [isSpeaking, autoListen, isRecording, isSttProcessing, isThinking]);
 
   // Pipeline is considered busy whenever the app is actively recording,
   // transcribing, waiting for the agent, or playing back audio.
@@ -647,6 +664,24 @@ export default function VoiceChat() {
                         safeStorage.setItem('wakeWordEnabled', String(checked));
                       }}
                       data-testid="toggle-wake-word"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between space-x-4">
+                    <Label htmlFor="auto-listen" className="flex flex-col space-y-1">
+                      <span className="text-sm font-medium">Auto-listen</span>
+                      <span className="text-xs text-muted-foreground">
+                        Start listening after agent finishes speaking
+                      </span>
+                    </Label>
+                    <Switch
+                      id="auto-listen"
+                      checked={autoListen}
+                      onCheckedChange={(checked) => {
+                        setAutoListen(checked);
+                        safeStorage.setItem('autoListen', String(checked));
+                      }}
+                      data-testid="toggle-auto-listen"
                     />
                   </div>
 
