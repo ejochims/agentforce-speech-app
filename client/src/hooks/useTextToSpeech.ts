@@ -11,6 +11,7 @@ export function useTextToSpeech() {
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [pendingAudioText, setPendingAudioText] = useState<string | null>(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [isTtsFetching, setIsTtsFetching] = useState(false);
 
   // Refs for Safari iOS audio unlock pattern
   const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -44,6 +45,7 @@ export function useTextToSpeech() {
       return false;
     }
 
+    setIsTtsFetching(true);
     console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
     const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison&_t=${Date.now()}`;
 
@@ -70,12 +72,14 @@ export function useTextToSpeech() {
           .then(() => {
             console.log('✓ Audio playback started');
             currentPlayingAudioRef.current = audio;
+            setIsTtsFetching(false);
             setIsAudioPlaying(true);
             resolve(true);
           })
           .catch((playError) => {
             console.error('❌ Audio play failed:', playError);
             console.error('💡 Hint: If on iOS Safari, make sure audio was unlocked during user gesture');
+            setIsTtsFetching(false);
             setIsAudioPlaying(false);
             setPendingAudioText(text);
             cleanup();
@@ -85,6 +89,7 @@ export function useTextToSpeech() {
 
       const onError = () => {
         console.error('❌ Audio loading error');
+        setIsTtsFetching(false);
         setIsAudioPlaying(false);
         setPendingAudioText(text);
         cleanup();
@@ -122,6 +127,7 @@ export function useTextToSpeech() {
       setTimeout(() => {
         if (audio.readyState === 0) {
           console.warn('⚠️ Audio loading timeout');
+          setIsTtsFetching(false);
           setPendingAudioText(text);
           cleanup();
           resolve(false);
@@ -174,6 +180,7 @@ export function useTextToSpeech() {
     setAudioEnabled(false);
     audioEnabledRef.current = false;
     setShowAudioPrompt(false);
+    setIsTtsFetching(false);
     setPendingAudioText(null);
     safeStorage.setItem('audioEnabled', 'false');
   }, [audioContext]);
@@ -215,6 +222,7 @@ export function useTextToSpeech() {
   const stopAudio = useCallback(() => {
     const audio = currentPlayingAudioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; currentPlayingAudioRef.current = null; }
+    setIsTtsFetching(false);
     setIsAudioPlaying(false);
   }, []);
 
@@ -223,6 +231,7 @@ export function useTextToSpeech() {
     showAudioPrompt,
     pendingAudioText,
     isAudioPlaying,
+    isTtsFetching,
     initializeAudio,
     disableAudio,
     playTextAsAudio,

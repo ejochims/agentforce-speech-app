@@ -259,7 +259,7 @@ export default function VoiceChat() {
   const isSttProcessing = recorder.recordingState === 'processing';
   const hasPendingAgentTrigger = [...conversation.pendingMessages.values()].some(m => m.state === 'sending');
   const isThinking = agentStream.agentPending || agentStream.isAgentStreaming || hasPendingAgentTrigger;
-  const isSpeaking = tts.isAudioPlaying;
+  const isSpeaking = tts.isAudioPlaying || tts.isTtsFetching;
 
   // Latch thinking state so the orb never flickers to idle between thinking→speaking.
   // Holds until speaking begins, or clears after a short timeout if speaking never starts.
