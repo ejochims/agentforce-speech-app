@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { safeStorage } from '@/lib/safeStorage';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio, Moon, Mic, KeyboardIcon, Sparkles } from 'lucide-react';
+import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio, Moon, Mic, KeyboardIcon, Sparkles, PhoneOff } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -1095,11 +1095,37 @@ export default function VoiceChat() {
           {/* Mic row — 3-column grid so mic stays centered regardless of flanking controls */}
           <div className="grid grid-cols-3 items-center">
 
-            {/* Left: Stop Speaking */}
+            {/* Left: Done (auto-listen exit) or Stop Speaking */}
             <div className="flex items-center justify-start">
-              <AnimatePresence>
-                {tts.isAudioPlaying && (
+              <AnimatePresence mode="wait">
+                {autoListen && conversation.turns.length > 0 ? (
                   <motion.div
+                    key="done"
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -8 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        tts.stopAudio();
+                        voiceRecordRef.current?.stopRecording(true);
+                        setAutoListen(false);
+                        safeStorage.setItem('autoListen', 'false');
+                      }}
+                      className="rounded-full h-9 px-md text-sm gap-sm"
+                      aria-label="End auto-listen and stop conversation loop"
+                      data-testid="button-done-auto-listen"
+                    >
+                      <PhoneOff className="w-3.5 h-3.5" />
+                      Done
+                    </Button>
+                  </motion.div>
+                ) : tts.isAudioPlaying ? (
+                  <motion.div
+                    key="stop"
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -8 }}
@@ -1116,7 +1142,7 @@ export default function VoiceChat() {
                       Stop
                     </Button>
                   </motion.div>
-                )}
+                ) : null}
               </AnimatePresence>
             </div>
 
