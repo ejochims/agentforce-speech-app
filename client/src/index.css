@@ -118,7 +118,7 @@
   --animation-normal: 200ms;
   --animation-slow: 300ms;
 
-  --font-sans: Open Sans, sans-serif;
+  --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: .5rem; /* 8px */
