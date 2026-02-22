@@ -260,6 +260,28 @@ export default function VoiceChat() {
   const isThinking = agentStream.agentPending || agentStream.isAgentStreaming;
   const isSpeaking = tts.isAudioPlaying;
 
+  // Latch thinking state so the orb never flickers to idle between thinking→speaking.
+  // Holds until speaking begins, or clears after a short timeout if speaking never starts.
+  const [thinkingLatch, setThinkingLatch] = useState(false);
+  const thinkingTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (isThinking) {
+      clearTimeout(thinkingTimerRef.current);
+      setThinkingLatch(true);
+      return;
+    }
+    if (!isSpeaking) {
+      // isThinking just dropped and speaking hasn't started — hold briefly
+      thinkingTimerRef.current = setTimeout(() => setThinkingLatch(false), 600);
+      return () => clearTimeout(thinkingTimerRef.current);
+    }
+    // Speaking is already running — release latch immediately
+    clearTimeout(thinkingTimerRef.current);
+    setThinkingLatch(false);
+  }, [isThinking, isSpeaking]);
+
+  const effectivelyThinking = isThinking || thinkingLatch;
+
   // Pipeline is considered busy whenever the app is actively recording,
   // transcribing, waiting for the agent, or playing back audio.
   // Wake word detection is paused during these states.
@@ -279,11 +301,11 @@ export default function VoiceChat() {
   });
 
 
-  const orbState: OrbState = isRecording    ? 'recording'
-    : isSttProcessing ? 'processing'
-    : isThinking      ? 'thinking'
-    : isSpeaking      ? 'speaking'
-    :                   'idle';
+  const orbState: OrbState = isRecording         ? 'recording'
+    : isSttProcessing    ? 'processing'
+    : effectivelyThinking ? 'thinking'
+    : isSpeaking          ? 'speaking'
+    :                       'idle';
 
   // RGB triple used for the ambient radial gradient overlay (CSS can't transition
   // gradient keywords, so we cross-fade per-state divs using opacity transitions)
@@ -291,7 +313,7 @@ export default function VoiceChat() {
     ? 'drop-shadow(0 0 14px rgba(59,130,246,0.55))'
     : isSttProcessing
     ? 'drop-shadow(0 0 14px rgba(245,158,11,0.50))'
-    : isThinking
+    : effectivelyThinking
     ? 'drop-shadow(0 0 14px rgba(168,85,247,0.55))'
     : isSpeaking
     ? 'drop-shadow(0 0 14px rgba(34,197,94,0.50))'
@@ -929,24 +951,24 @@ export default function VoiceChat() {
             {/* ── Status text ── */}
             <div className="text-center space-y-2">
               <p className={`text-2xl font-light tracking-wide transition-colors duration-500 ${
-                isRecording    ? 'text-blue-600' :
-                isSttProcessing ? 'text-amber-600' :
-                isThinking     ? 'text-purple-600' :
-                isSpeaking     ? 'text-emerald-600' :
-                                 'text-gray-400'
+                isRecording         ? 'text-blue-600' :
+                isSttProcessing     ? 'text-amber-600' :
+                effectivelyThinking ? 'text-purple-600' :
+                isSpeaking          ? 'text-emerald-600' :
+                                      'text-gray-400'
               }`}>
-                {isRecording    ? 'Listening...' :
-                 isSttProcessing ? 'Processing...' :
-                 isThinking     ? (agentStream.streamingText ? 'Responding...' : 'Thinking...') :
-                 isSpeaking     ? 'Speaking...' :
-                                  'Ready'}
+                {isRecording         ? 'Listening...' :
+                 isSttProcessing     ? 'Processing...' :
+                 effectivelyThinking ? (agentStream.streamingText ? 'Responding...' : 'Thinking...') :
+                 isSpeaking          ? 'Speaking...' :
+                                       'Ready'}
               </p>
-              {!isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
+              {!isRecording && !isSttProcessing && !effectivelyThinking && !isSpeaking && (
                 <p className="text-sm text-gray-300">
                   {wakeWordListening ? 'Say "Hey Agentforce" or tap the mic' : 'Tap the mic to start'}
                 </p>
               )}
-              {conversation.turns.length > 0 && !isRecording && !isSttProcessing && !isThinking && !isSpeaking && (
+              {conversation.turns.length > 0 && !isRecording && !isSttProcessing && !effectivelyThinking && !isSpeaking && (
                 <button
                   onClick={handleStartNewChat}
                   className="text-xs text-gray-300 hover:text-gray-500 transition-colors duration-200 mt-2"
