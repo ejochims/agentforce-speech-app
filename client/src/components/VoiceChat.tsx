@@ -38,6 +38,7 @@ import MessageSkeleton from './MessageSkeleton';
 import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
 import AgentTransparencyPanel from './AgentTransparencyPanel';
+import AmbientOrb, { type OrbState } from './AmbientOrb';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useAudioRecorder, type SttTransparency } from '@/hooks/useAudioRecorder';
 import { useAgentStream } from '@/hooks/useAgentStream';
@@ -278,18 +279,14 @@ export default function VoiceChat() {
   });
 
 
-  const glowHalo = isRecording    ? 'rgba(59,130,246,0.40)'
-    : isSttProcessing ? 'rgba(245,158,11,0.35)'
-    : isThinking      ? 'rgba(168,85,247,0.40)'
-    : isSpeaking      ? 'rgba(34,197,94,0.35)'
-    :                   'rgba(59,130,246,0.18)';
+  const orbState: OrbState = isRecording    ? 'recording'
+    : isSttProcessing ? 'processing'
+    : isThinking      ? 'thinking'
+    : isSpeaking      ? 'speaking'
+    :                   'idle';
 
-  const glowHaloOuter = isRecording    ? 'rgba(59,130,246,0.15)'
-    : isSttProcessing ? 'rgba(245,158,11,0.12)'
-    : isThinking      ? 'rgba(168,85,247,0.15)'
-    : isSpeaking      ? 'rgba(34,197,94,0.12)'
-    :                   'rgba(59,130,246,0.06)';
-
+  // RGB triple used for the ambient radial gradient overlay (CSS can't transition
+  // gradient keywords, so we cross-fade per-state divs using opacity transitions)
   const micDropShadow = isRecording
     ? 'drop-shadow(0 0 14px rgba(59,130,246,0.55))'
     : isSttProcessing
@@ -302,21 +299,44 @@ export default function VoiceChat() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  // Subtle full-screen ambient tint for voice mode — eliminates the hard line
-  // where the orb's local halos fade out before reaching the footer.
-  const shellTint = !showConversation
-    ? isRecording    ? 'rgba(59,130,246,0.06)'
-      : isSttProcessing ? 'rgba(245,158,11,0.05)'
-      : isThinking      ? 'rgba(168,85,247,0.06)'
-      : isSpeaking      ? 'rgba(34,197,94,0.05)'
-      :                   'transparent'
-    : undefined;
-
   return (
-    <div
-      className="app-shell"
-      style={shellTint !== undefined ? { backgroundColor: shellTint, transition: 'background-color 700ms ease' } : undefined}
-    >
+    <div className="app-shell relative">
+      {/* ─── Ambient radial gradient wash ─────────────────────────────────────
+          Multiple pre-coloured divs cross-fade via opacity so CSS can
+          transition them smoothly (gradients themselves can't be transitioned). */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true" style={{ zIndex: 0 }}>
+        {/* idle — blue, always subtly present */}
+        <div className="absolute inset-0 transition-opacity duration-700"
+          style={{ opacity: orbState === 'idle' ? 1 : 0,
+            background: showConversation
+              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(59,130,246,0.05) 0%, transparent 100%)'
+              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(59,130,246,0.14) 0%, transparent 68%)' }} />
+        {/* recording — vivid blue */}
+        <div className="absolute inset-0 transition-opacity duration-700"
+          style={{ opacity: orbState === 'recording' ? 1 : 0,
+            background: showConversation
+              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(37,99,235,0.07) 0%, transparent 100%)'
+              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(37,99,235,0.20) 0%, transparent 68%)' }} />
+        {/* processing — amber */}
+        <div className="absolute inset-0 transition-opacity duration-700"
+          style={{ opacity: orbState === 'processing' ? 1 : 0,
+            background: showConversation
+              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(245,158,11,0.06) 0%, transparent 100%)'
+              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(245,158,11,0.18) 0%, transparent 68%)' }} />
+        {/* thinking — purple */}
+        <div className="absolute inset-0 transition-opacity duration-700"
+          style={{ opacity: orbState === 'thinking' ? 1 : 0,
+            background: showConversation
+              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(168,85,247,0.07) 0%, transparent 100%)'
+              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(168,85,247,0.20) 0%, transparent 68%)' }} />
+        {/* speaking — emerald */}
+        <div className="absolute inset-0 transition-opacity duration-700"
+          style={{ opacity: orbState === 'speaking' ? 1 : 0,
+            background: showConversation
+              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(34,197,94,0.06) 0%, transparent 100%)'
+              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(34,197,94,0.18) 0%, transparent 68%)' }} />
+      </div>
+
       {/* Mobile App Header */}
       <header className="app-header" role="banner">
         <div className="flex items-center justify-between px-lg py-sm">
@@ -754,17 +774,8 @@ export default function VoiceChat() {
           {conversation.turns.length === 0 && !conversation.turnsLoading && !conversation.isValidatingConversation && (
             <div className="flex flex-col items-center justify-center h-full text-center px-xl select-none">
               <div className="mb-2xl">
-                {/* Orb with blur halo — matches voice mode visual language */}
-                <div className="relative w-fit mx-auto mb-xl">
-                  <div className="absolute -inset-8 rounded-full blur-2xl bg-blue-400/15" />
-                  <div className="relative w-32 h-32 rounded-full bg-blue-50 border border-blue-100/80 flex items-center justify-center shadow-sm">
-                    <img
-                      src={agentforceLogo}
-                      alt="Agentforce"
-                      className="w-20 h-20 object-contain"
-                      data-testid="img-agentforce-logo"
-                    />
-                  </div>
+                <div className="flex justify-center mb-xl" data-testid="img-agentforce-logo">
+                  <AmbientOrb state={orbState} logoSrc={agentforceLogo} size={128} />
                 </div>
                 <h2 className="text-xl font-semibold text-foreground mb-sm" data-testid="text-main-title">
                   Talk to Agentforce
@@ -913,51 +924,7 @@ export default function VoiceChat() {
           >
 
             {/* ── Ambient Orb ── */}
-            {/* Outer wrapper establishes position context without will-change, so halo isn't clipped by compositing layer */}
-            <div className="relative">
-              {/* Halo sits outside the animated div so will-change:transform doesn't clip it */}
-              <div
-                className="absolute -inset-16 rounded-full blur-3xl transition-all duration-700 pointer-events-none"
-                style={{ background: glowHalo }}
-              />
-              <div
-                className="absolute -inset-28 rounded-full blur-3xl transition-all duration-700 pointer-events-none"
-                style={{ background: glowHaloOuter }}
-              />
-
-              <div className={`relative animate-orb-glow transition-transform duration-500 ${
-                isRecording || isThinking || isSpeaking ? 'scale-110' :
-                isSttProcessing ? 'scale-105' : 'scale-100'
-              }`}>
-              {/* Orb — tinted interior */}
-              <div
-                className="relative w-48 h-48 rounded-full flex items-center justify-center transition-all duration-700"
-              >
-                {/* State-tinted inner background */}
-                <div className={`absolute inset-0 rounded-full transition-all duration-700 ${
-                  isRecording    ? 'bg-blue-100/70' :
-                  isSttProcessing ? 'bg-amber-100/60' :
-                  isThinking     ? 'bg-purple-100/65' :
-                  isSpeaking     ? 'bg-emerald-100/60' :
-                                   'bg-blue-50/50'
-                }`} />
-                {/* Pulsing colored border — stays on the orb, no overflow */}
-                <div className={`absolute inset-0 rounded-full border-2 transition-all duration-700 ${
-                  isRecording    ? 'border-blue-400/70 animate-pulse' :
-                  isSttProcessing ? 'border-amber-400/60 animate-pulse' :
-                  isThinking     ? 'border-purple-400/65 animate-pulse' :
-                  isSpeaking     ? 'border-emerald-400/60 animate-pulse' :
-                                   'border-gray-200/60'
-                }`} />
-                <img
-                  src={agentforceLogo}
-                  alt="Agentforce"
-                  className="relative w-28 h-28 object-contain z-10"
-                  data-testid="voice-mode-logo"
-                />
-              </div>
-              </div>
-            </div>
+            <AmbientOrb state={orbState} logoSrc={agentforceLogo} size={192} />
 
             {/* ── Status text ── */}
             <div className="text-center space-y-2">
