@@ -51,10 +51,14 @@ export function useTextToSpeech() {
 
     let audio: HTMLAudioElement;
     if (blessedAudioRef.current) {
+      // Safari iOS: reuse the blessed element that was unlocked during a user gesture.
+      // Call load() to reset any previous error state before setting the new src.
       console.log('🎵 Reusing blessed audio element for Safari iOS');
       audio = blessedAudioRef.current;
       audio.src = audioUrl;
+      audio.load();
     } else {
+      // Chrome/desktop: create a fresh element every time to avoid stale error states.
       console.log('🎵 Creating new audio element (desktop)');
       audio = new Audio();
       audio.preload = 'auto';
@@ -66,34 +70,22 @@ export function useTextToSpeech() {
     audio.volume = 1.0;
 
     return new Promise((resolve) => {
-      const onCanPlay = () => {
-        console.log('🎵 Audio canplay, attempting playback...');
-        audio.play()
-          .then(() => {
-            console.log('✓ Audio playback started');
-            currentPlayingAudioRef.current = audio;
-            setIsTtsFetching(false);
-            setIsAudioPlaying(true);
-            resolve(true);
-          })
-          .catch((playError) => {
-            console.error('❌ Audio play failed:', playError);
-            console.error('💡 Hint: If on iOS Safari, make sure audio was unlocked during user gesture');
-            setIsTtsFetching(false);
-            setIsAudioPlaying(false);
-            setPendingAudioText(text);
-            cleanup();
-            resolve(false);
-          });
-      };
-
-      const onError = () => {
-        console.error('❌ Audio loading error');
-        setIsTtsFetching(false);
-        setIsAudioPlaying(false);
-        setPendingAudioText(text);
-        cleanup();
-        resolve(false);
+      // Guard against settle() being called twice (e.g. play() rejection AND error event).
+      let settled = false;
+      const settle = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        if (success) {
+          currentPlayingAudioRef.current = audio;
+          setIsTtsFetching(false);
+          setIsAudioPlaying(true);
+        } else {
+          setIsTtsFetching(false);
+          setIsAudioPlaying(false);
+          setPendingAudioText(text);
+          cleanup();
+        }
+        resolve(success);
       };
 
       const onEnded = () => {
@@ -112,27 +104,37 @@ export function useTextToSpeech() {
         }
       };
 
-      const cleanup = () => {
-        audio.removeEventListener('canplay', onCanPlay);
-        audio.removeEventListener('error', onError);
-        audio.removeEventListener('ended', onEnded);
-        audio.removeEventListener('pause', onPause);
+      const onError = () => {
+        console.error('❌ Audio loading/decoding error (TTS fetch may have failed)');
+        settle(false);
       };
 
-      audio.addEventListener('canplay', onCanPlay);
-      audio.addEventListener('error', onError);
+      const cleanup = () => {
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('pause', onPause);
+        audio.removeEventListener('error', onError);
+      };
+
       audio.addEventListener('ended', onEnded);
       audio.addEventListener('pause', onPause);
+      audio.addEventListener('error', onError);
 
-      setTimeout(() => {
-        if (audio.readyState === 0) {
-          console.warn('⚠️ Audio loading timeout');
-          setIsTtsFetching(false);
-          setPendingAudioText(text);
-          cleanup();
-          resolve(false);
-        }
-      }, 3000);
+      // Call play() immediately rather than waiting for the 'canplay' event.
+      // This keeps the call within Chrome's user-activation window and avoids
+      // the race where a cached/fast-loading response fires 'canplay' before
+      // the listener is attached. The play() promise resolves once the browser
+      // starts rendering frames, so isTtsFetching stays true until then.
+      console.log('🎵 Calling audio.play() directly...');
+      audio.play()
+        .then(() => {
+          console.log('✓ Audio playback started');
+          settle(true);
+        })
+        .catch((playError) => {
+          console.error('❌ audio.play() rejected:', playError.name, playError.message);
+          console.error('💡 Hint: If on iOS Safari, make sure audio was unlocked during a user gesture');
+          settle(false);
+        });
     });
   }, []); // stable — reads audioEnabled via ref
 

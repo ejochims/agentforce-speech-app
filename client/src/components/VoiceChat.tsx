@@ -805,7 +805,13 @@ export default function VoiceChat() {
                     <div className="flex items-center gap-sm">
                       <Button
                         size="sm"
-                        onClick={() => { if (tts.pendingAudioText) tts.initializeAudio(); }}
+                        onClick={() => {
+                          const text = tts.pendingAudioText;
+                          if (!text) return;
+                          // Clear optimistically; playTextAsAudio will restore it if playback fails.
+                          tts.setPendingAudioText(null);
+                          tts.playTextAsAudio(text);
+                        }}
                         className="rounded-full bg-orange-600 hover:bg-orange-700 text-white"
                         data-testid="button-play-pending-audio"
                       >
