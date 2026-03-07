@@ -186,6 +186,10 @@ export default function VoiceChat() {
   // ─── Event handlers ───────────────────────────────────────────────────────
   const handleTextMessage = async () => {
     if (!textMessage.trim() || !conversation.currentConversationId) return;
+    // Unlock AudioContext during this user gesture so TTS works when the
+    // agent responds (iOS Safari suspends AudioContext outside gestures).
+    tts.stopAudio();
+    tts.unlockAudioForSafari();
     setIsProcessing(true);
 
     const messageText = textMessage;
