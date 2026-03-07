@@ -809,9 +809,12 @@ export default function VoiceChat() {
                     <div className="flex items-center gap-sm">
                       <Button
                         size="sm"
-                        onClick={() => {
+                        onClick={async () => {
                           const text = tts.pendingAudioText;
                           if (!text) return;
+                          // Unlock AudioContext + blessed element during this gesture
+                          // so audio.play() succeeds when doPlay runs asynchronously.
+                          await tts.unlockAudioForSafari();
                           // Clear optimistically; playTextAsAudio will restore it if playback fails.
                           tts.setPendingAudioText(null);
                           tts.playTextAsAudio(text);

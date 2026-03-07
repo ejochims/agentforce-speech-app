@@ -131,8 +131,11 @@ export function useTextToSpeech() {
       if (blessedAudioRef.current) {
         console.log('🎵 Reusing blessed audio element for Safari iOS');
         audio = blessedAudioRef.current;
-        // Pause and reset before changing src to avoid overlap or decode errors.
-        if (!audio.paused) { audio.pause(); audio.currentTime = 0; }
+        // Always pause and reset before changing src — ended audio has
+        // paused===true so the old `if (!paused)` guard skipped this,
+        // leaving currentTime at the end which breaks replay on iOS.
+        audio.pause();
+        audio.currentTime = 0;
         audio.src = audioUrl;
       } else {
         console.log('🎵 Creating new audio element (desktop)');
@@ -220,13 +223,19 @@ export function useTextToSpeech() {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (ctx.state === 'suspended') await ctx.resume();
 
-      // Unlock HTML5 audio for Safari iOS (fallback path)
+      // Unlock HTML5 audio for Safari iOS (fallback path) and save as the
+      // blessed element so HTMLAudioElement TTS works without a gesture later.
       console.log('🔓 Unlocking HTML5 audio for iOS Safari...');
       const silentAudio = new Audio();
       silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
       (silentAudio as any).playsInline = true;
-      try { await silentAudio.play(); console.log('✓ HTML5 audio unlocked'); }
-      catch (e) { console.log('⚠️ HTML5 audio unlock failed (may work anyway):', e); }
+      try {
+        await silentAudio.play();
+        silentAudio.pause();
+        silentAudio.currentTime = 0;
+        console.log('✓ HTML5 audio unlocked');
+      } catch (e) { console.log('⚠️ HTML5 audio unlock failed (may work anyway):', e); }
+      if (!blessedAudioRef.current) blessedAudioRef.current = silentAudio;
 
       setAudioContext(ctx);
       // Eagerly sync ref so playTextAsAudio below can use the Web Audio path
