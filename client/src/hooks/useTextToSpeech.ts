@@ -139,23 +139,15 @@ export function useTextToSpeech() {
       audio.muted = false;
       audio.volume = 1.0;
 
+      // The promise must resolve only when audio *ends* (or fails), not when it
+      // starts — otherwise the queue releases the next TTS immediately and two
+      // clips play simultaneously, recreating the original race condition.
       return new Promise((resolve) => {
-        let settled = false;
-        const settle = (success: boolean) => {
-          if (settled) return;
-          settled = true;
-          if (success) {
-            currentPlayingAudioRef.current = audio;
-            setIsTtsFetching(false);
-            setIsAudioPlaying(true);
-          } else {
-            setIsTtsFetching(false);
-            setIsAudioPlaying(false);
-            // Only restore pending text if this generation is still current —
-            // otherwise stopAudio() was called and the text is intentionally discarded.
-            if (generation === ttsGenerationRef.current) setPendingAudioText(text);
-            cleanup();
-          }
+        let resolved = false;
+        const done = (success: boolean) => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
           resolve(success);
         };
 
@@ -163,7 +155,7 @@ export function useTextToSpeech() {
           console.log('✓ Audio playback completed');
           if (currentPlayingAudioRef.current === audio) currentPlayingAudioRef.current = null;
           setIsAudioPlaying(false);
-          cleanup();
+          done(true);
         };
 
         // Safari iOS sometimes skips the 'ended' event for streamed audio.
@@ -176,7 +168,10 @@ export function useTextToSpeech() {
 
         const onError = () => {
           console.error('❌ Audio loading/decoding error (TTS fetch may have failed)');
-          settle(false);
+          setIsTtsFetching(false);
+          setIsAudioPlaying(false);
+          if (generation === ttsGenerationRef.current) setPendingAudioText(text);
+          done(false);
         };
 
         const cleanup = () => {
@@ -193,11 +188,15 @@ export function useTextToSpeech() {
         audio.play()
           .then(() => {
             console.log('✓ Audio playback started');
-            settle(true);
+            currentPlayingAudioRef.current = audio;
+            setIsTtsFetching(false);
+            setIsAudioPlaying(true);
+            // Do NOT call done() here — wait for onEnded/onError so the queue
+            // holds until this clip finishes before starting the next one.
           })
           .catch((playError) => {
             console.error('❌ audio.play() rejected:', playError.name, playError.message);
-            settle(false);
+            onError();
           });
       });
     };
