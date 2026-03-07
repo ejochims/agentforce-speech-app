@@ -28,6 +28,12 @@ export function useTextToSpeech() {
   const audioContextRef = useRef<AudioContext | null>(null);
   audioContextRef.current = audioContext;
 
+  // Sequential TTS queue — prevents early-TTS and remainder from overlapping.
+  // Both calls resolve in order; the second waits for the first to finish.
+  const ttsQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  // Incrementing this cancels all in-flight/queued TTS (used by stopAudio).
+  const ttsGenerationRef = useRef(0);
+
   // Restore audio context for returning users who previously enabled audio
   useEffect(() => {
     if (safeStorage.getItem('audioEnabled') === 'true') {
@@ -50,134 +56,158 @@ export function useTextToSpeech() {
       return false;
     }
 
-    setIsTtsFetching(true);
-    console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
-    const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison`;
+    // Capture generation at call-time. stopAudio() increments it to cancel work.
+    const generation = ttsGenerationRef.current;
 
-    // --- Primary path: Web Audio API ---
-    // More reliable on iOS Safari than HTMLAudioElement src-swapping: once an
-    // AudioContext has been resumed inside a user gesture it can decode and play
-    // buffers at any time without another gesture.
-    const ctx = audioContextRef.current;
-    if (ctx && ctx.state !== 'closed') {
-      try {
-        if (ctx.state === 'suspended') {
-          console.log('🔊 Resuming suspended AudioContext...');
-          await ctx.resume();
-        }
+    const doPlay = async (): Promise<boolean> => {
+      // Bail out if audio was disabled or stopAudio() was called while queued.
+      if (!audioEnabledRef.current || generation !== ttsGenerationRef.current) return false;
 
-        console.log('🎵 Fetching TTS audio for Web Audio API...');
-        const response = await fetch(audioUrl);
-        if (!response.ok) throw new Error(`TTS fetch failed: ${response.status}`);
+      setIsTtsFetching(true);
+      console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
+      const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison`;
 
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      // --- Primary path: Web Audio API ---
+      // More reliable on iOS Safari than HTMLAudioElement src-swapping: once an
+      // AudioContext has been resumed inside a user gesture it can decode and play
+      // buffers at any time without another gesture.
+      const ctx = audioContextRef.current;
+      if (ctx && ctx.state !== 'closed') {
+        try {
+          if (ctx.state === 'suspended') {
+            console.log('🔊 Resuming suspended AudioContext...');
+            await ctx.resume();
+          }
+          if (generation !== ttsGenerationRef.current) { setIsTtsFetching(false); return false; }
 
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(ctx.destination);
-        currentBufferSourceRef.current = source;
+          console.log('🎵 Fetching TTS audio for Web Audio API...');
+          const response = await fetch(audioUrl);
+          if (!response.ok) throw new Error(`TTS fetch failed: ${response.status}`);
+          if (generation !== ttsGenerationRef.current) { setIsTtsFetching(false); return false; }
 
-        setIsTtsFetching(false);
-        setIsAudioPlaying(true);
+          const arrayBuffer = await response.arrayBuffer();
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+          if (generation !== ttsGenerationRef.current) { setIsTtsFetching(false); return false; }
 
-        return new Promise((resolve) => {
-          source.onended = () => {
-            console.log('✓ Web Audio playback completed');
-            currentBufferSourceRef.current = null;
-            setIsAudioPlaying(false);
-            resolve(true);
-          };
-          source.start(0);
-          console.log('✓ Web Audio playback started');
-        });
-      } catch (webAudioError) {
-        console.error('❌ Web Audio playback failed, falling back to HTMLAudioElement:', webAudioError);
-        setIsTtsFetching(false);
-        // Fall through to HTMLAudioElement path below
-      }
-    }
+          const source = ctx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(ctx.destination);
+          currentBufferSourceRef.current = source;
 
-    // --- Fallback path: HTMLAudioElement ---
-    // Uses the blessed element on iOS (preserves gesture unlock). Do NOT call
-    // audio.load() after changing src — it resets the blessed state on iOS Safari.
-    setIsTtsFetching(true);
-    let audio: HTMLAudioElement;
-    if (blessedAudioRef.current) {
-      console.log('🎵 Reusing blessed audio element for Safari iOS');
-      audio = blessedAudioRef.current;
-      audio.src = audioUrl;
-    } else {
-      console.log('🎵 Creating new audio element (desktop)');
-      audio = new Audio();
-      audio.preload = 'auto';
-      audio.src = audioUrl;
-      (audio as any).playsInline = true;
-    }
-
-    audio.muted = false;
-    audio.volume = 1.0;
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const settle = (success: boolean) => {
-        if (settled) return;
-        settled = true;
-        if (success) {
-          currentPlayingAudioRef.current = audio;
           setIsTtsFetching(false);
           setIsAudioPlaying(true);
-        } else {
-          setIsTtsFetching(false);
+
+          return new Promise((resolve) => {
+            source.onended = () => {
+              console.log('✓ Web Audio playback completed');
+              // Only clear the ref if it still points to this source — stopAudio()
+              // may have already replaced or cleared it.
+              if (currentBufferSourceRef.current === source) currentBufferSourceRef.current = null;
+              setIsAudioPlaying(false);
+              resolve(true);
+            };
+            source.start(0);
+            console.log('✓ Web Audio playback started');
+          });
+        } catch (webAudioError) {
+          console.error('❌ Web Audio playback failed, falling back to HTMLAudioElement:', webAudioError);
+          // Clear any orphaned source ref (may have been set before the error).
+          currentBufferSourceRef.current = null;
+          // isTtsFetching stays true — the HTMLAudioElement path takes over below.
+        }
+      }
+
+      // --- Fallback path: HTMLAudioElement ---
+      // Uses the blessed element on iOS (preserves gesture unlock).
+      if (generation !== ttsGenerationRef.current) { setIsTtsFetching(false); return false; }
+
+      let audio: HTMLAudioElement;
+      if (blessedAudioRef.current) {
+        console.log('🎵 Reusing blessed audio element for Safari iOS');
+        audio = blessedAudioRef.current;
+        // Pause and reset before changing src to avoid overlap or decode errors.
+        if (!audio.paused) { audio.pause(); audio.currentTime = 0; }
+        audio.src = audioUrl;
+      } else {
+        console.log('🎵 Creating new audio element (desktop)');
+        audio = new Audio();
+        audio.preload = 'auto';
+        audio.src = audioUrl;
+        (audio as any).playsInline = true;
+      }
+
+      audio.muted = false;
+      audio.volume = 1.0;
+
+      return new Promise((resolve) => {
+        let settled = false;
+        const settle = (success: boolean) => {
+          if (settled) return;
+          settled = true;
+          if (success) {
+            currentPlayingAudioRef.current = audio;
+            setIsTtsFetching(false);
+            setIsAudioPlaying(true);
+          } else {
+            setIsTtsFetching(false);
+            setIsAudioPlaying(false);
+            // Only restore pending text if this generation is still current —
+            // otherwise stopAudio() was called and the text is intentionally discarded.
+            if (generation === ttsGenerationRef.current) setPendingAudioText(text);
+            cleanup();
+          }
+          resolve(success);
+        };
+
+        const onEnded = () => {
+          console.log('✓ Audio playback completed');
+          if (currentPlayingAudioRef.current === audio) currentPlayingAudioRef.current = null;
           setIsAudioPlaying(false);
-          setPendingAudioText(text);
           cleanup();
-        }
-        resolve(success);
-      };
+        };
 
-      const onEnded = () => {
-        console.log('✓ Audio playback completed');
-        currentPlayingAudioRef.current = null;
-        setIsAudioPlaying(false);
-        cleanup();
-      };
+        // Safari iOS sometimes skips the 'ended' event for streamed audio.
+        const onPause = () => {
+          if (audio.ended) {
+            console.log('✓ Audio ended via pause fallback (Safari iOS)');
+            onEnded();
+          }
+        };
 
-      // Safari iOS sometimes skips the 'ended' event for streamed audio.
-      const onPause = () => {
-        if (audio.ended) {
-          console.log('✓ Audio ended via pause fallback (Safari iOS)');
-          onEnded();
-        }
-      };
-
-      const onError = () => {
-        console.error('❌ Audio loading/decoding error (TTS fetch may have failed)');
-        settle(false);
-      };
-
-      const cleanup = () => {
-        audio.removeEventListener('ended', onEnded);
-        audio.removeEventListener('pause', onPause);
-        audio.removeEventListener('error', onError);
-      };
-
-      audio.addEventListener('ended', onEnded);
-      audio.addEventListener('pause', onPause);
-      audio.addEventListener('error', onError);
-
-      console.log('🎵 Calling audio.play() directly...');
-      audio.play()
-        .then(() => {
-          console.log('✓ Audio playback started');
-          settle(true);
-        })
-        .catch((playError) => {
-          console.error('❌ audio.play() rejected:', playError.name, playError.message);
+        const onError = () => {
+          console.error('❌ Audio loading/decoding error (TTS fetch may have failed)');
           settle(false);
-        });
-    });
-  }, []); // stable — reads audioEnabled and audioContext via refs
+        };
+
+        const cleanup = () => {
+          audio.removeEventListener('ended', onEnded);
+          audio.removeEventListener('pause', onPause);
+          audio.removeEventListener('error', onError);
+        };
+
+        audio.addEventListener('ended', onEnded);
+        audio.addEventListener('pause', onPause);
+        audio.addEventListener('error', onError);
+
+        console.log('🎵 Calling audio.play() directly...');
+        audio.play()
+          .then(() => {
+            console.log('✓ Audio playback started');
+            settle(true);
+          })
+          .catch((playError) => {
+            console.error('❌ audio.play() rejected:', playError.name, playError.message);
+            settle(false);
+          });
+      });
+    };
+
+    // Chain onto the queue so concurrent calls (early TTS + remainder) play
+    // sequentially rather than overlapping and corrupting shared state.
+    const thisPlay = ttsQueueRef.current.then(doPlay, doPlay);
+    ttsQueueRef.current = thisPlay.then(() => true, () => true);
+    return thisPlay;
+  }, []); // stable — reads all mutable values via refs
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -289,6 +319,11 @@ export function useTextToSpeech() {
   }, []);
 
   const stopAudio = useCallback(() => {
+    // Increment generation — cancels all queued and in-flight TTS fetches/decodes.
+    ttsGenerationRef.current++;
+    // Reset the queue so the next playTextAsAudio call starts immediately.
+    ttsQueueRef.current = Promise.resolve(true);
+
     // Stop Web Audio BufferSource if active
     const bufferSource = currentBufferSourceRef.current;
     if (bufferSource) {
