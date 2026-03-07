@@ -78,6 +78,12 @@ export function useTextToSpeech() {
             console.log('🔊 Resuming suspended AudioContext...');
             await ctx.resume();
           }
+          // On iOS, ctx.resume() outside a user gesture resolves but leaves the
+          // context suspended. Detect this and fall through to HTMLAudioElement
+          // (which uses the blessed element that was unlocked during the gesture).
+          if (ctx.state === 'suspended') {
+            throw new Error('AudioContext still suspended after resume — outside gesture on iOS');
+          }
           if (generation !== ttsGenerationRef.current) { setIsTtsFetching(false); return false; }
 
           console.log('🎵 Fetching TTS audio for Web Audio API...');
