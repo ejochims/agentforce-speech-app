@@ -153,9 +153,12 @@ export function useTextToSpeech() {
       // clips play simultaneously, recreating the original race condition.
       return new Promise((resolve) => {
         let resolved = false;
+        let safariPoll: ReturnType<typeof setInterval> | null = null;
+
         const done = (success: boolean) => {
           if (resolved) return;
           resolved = true;
+          if (safariPoll !== null) { clearInterval(safariPoll); safariPoll = null; }
           cleanup();
           resolve(success);
         };
@@ -202,6 +205,15 @@ export function useTextToSpeech() {
             setIsAudioPlaying(true);
             // Do NOT call done() here — wait for onEnded/onError so the queue
             // holds until this clip finishes before starting the next one.
+
+            // Safari iOS sometimes never fires 'ended' or 'pause+ended' for
+            // streamed audio. Poll every 250 ms as a guaranteed escape hatch.
+            safariPoll = setInterval(() => {
+              if (audio.ended || (audio.duration > 0 && audio.currentTime >= audio.duration)) {
+                console.warn('⚠️ audio.ended detected via poll (Safari fallback)');
+                onEnded();
+              }
+            }, 250);
           })
           .catch((playError) => {
             console.error('❌ audio.play() rejected:', playError.name, playError.message);
