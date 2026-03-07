@@ -17,11 +17,16 @@ export function useTextToSpeech() {
   const blessedAudioRef = useRef<HTMLAudioElement | null>(null);
   const isAudioUnlockingRef = useRef(false);
   const currentPlayingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentBufferSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
-  // Always-current ref avoids stale closure in playTextAsAudio when called
-  // immediately after setAudioEnabled(true) in initializeAudio
+  // Always-current refs avoid stale closures in callbacks
   const audioEnabledRef = useRef(audioEnabled);
   audioEnabledRef.current = audioEnabled;
+
+  // Keep audioContextRef in sync with audioContext state so playTextAsAudio
+  // can read it without needing it in the dependency array.
+  const audioContextRef = useRef<AudioContext | null>(null);
+  audioContextRef.current = audioContext;
 
   // Restore audio context for returning users who previously enabled audio
   useEffect(() => {
@@ -49,16 +54,60 @@ export function useTextToSpeech() {
     console.log('🎵 Playing TTS audio:', text.substring(0, 50) + '...');
     const audioUrl = `/api/tts?text=${encodeURIComponent(text)}&voice=allison`;
 
+    // --- Primary path: Web Audio API ---
+    // More reliable on iOS Safari than HTMLAudioElement src-swapping: once an
+    // AudioContext has been resumed inside a user gesture it can decode and play
+    // buffers at any time without another gesture.
+    const ctx = audioContextRef.current;
+    if (ctx && ctx.state !== 'closed') {
+      try {
+        if (ctx.state === 'suspended') {
+          console.log('🔊 Resuming suspended AudioContext...');
+          await ctx.resume();
+        }
+
+        console.log('🎵 Fetching TTS audio for Web Audio API...');
+        const response = await fetch(audioUrl);
+        if (!response.ok) throw new Error(`TTS fetch failed: ${response.status}`);
+
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        currentBufferSourceRef.current = source;
+
+        setIsTtsFetching(false);
+        setIsAudioPlaying(true);
+
+        return new Promise((resolve) => {
+          source.onended = () => {
+            console.log('✓ Web Audio playback completed');
+            currentBufferSourceRef.current = null;
+            setIsAudioPlaying(false);
+            resolve(true);
+          };
+          source.start(0);
+          console.log('✓ Web Audio playback started');
+        });
+      } catch (webAudioError) {
+        console.error('❌ Web Audio playback failed, falling back to HTMLAudioElement:', webAudioError);
+        setIsTtsFetching(false);
+        // Fall through to HTMLAudioElement path below
+      }
+    }
+
+    // --- Fallback path: HTMLAudioElement ---
+    // Uses the blessed element on iOS (preserves gesture unlock). Do NOT call
+    // audio.load() after changing src — it resets the blessed state on iOS Safari.
+    setIsTtsFetching(true);
     let audio: HTMLAudioElement;
     if (blessedAudioRef.current) {
-      // Safari iOS: reuse the blessed element that was unlocked during a user gesture.
-      // Call load() to reset any previous error state before setting the new src.
       console.log('🎵 Reusing blessed audio element for Safari iOS');
       audio = blessedAudioRef.current;
       audio.src = audioUrl;
-      audio.load();
     } else {
-      // Chrome/desktop: create a fresh element every time to avoid stale error states.
       console.log('🎵 Creating new audio element (desktop)');
       audio = new Audio();
       audio.preload = 'auto';
@@ -70,7 +119,6 @@ export function useTextToSpeech() {
     audio.volume = 1.0;
 
     return new Promise((resolve) => {
-      // Guard against settle() being called twice (e.g. play() rejection AND error event).
       let settled = false;
       const settle = (success: boolean) => {
         if (settled) return;
@@ -96,7 +144,6 @@ export function useTextToSpeech() {
       };
 
       // Safari iOS sometimes skips the 'ended' event for streamed audio.
-      // Listening to 'pause' with audio.ended === true catches this case.
       const onPause = () => {
         if (audio.ended) {
           console.log('✓ Audio ended via pause fallback (Safari iOS)');
@@ -119,11 +166,6 @@ export function useTextToSpeech() {
       audio.addEventListener('pause', onPause);
       audio.addEventListener('error', onError);
 
-      // Call play() immediately rather than waiting for the 'canplay' event.
-      // This keeps the call within Chrome's user-activation window and avoids
-      // the race where a cached/fast-loading response fires 'canplay' before
-      // the listener is attached. The play() promise resolves once the browser
-      // starts rendering frames, so isTtsFetching stays true until then.
       console.log('🎵 Calling audio.play() directly...');
       audio.play()
         .then(() => {
@@ -132,11 +174,10 @@ export function useTextToSpeech() {
         })
         .catch((playError) => {
           console.error('❌ audio.play() rejected:', playError.name, playError.message);
-          console.error('💡 Hint: If on iOS Safari, make sure audio was unlocked during a user gesture');
           settle(false);
         });
     });
-  }, []); // stable — reads audioEnabled via ref
+  }, []); // stable — reads audioEnabled and audioContext via refs
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -144,7 +185,7 @@ export function useTextToSpeech() {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (ctx.state === 'suspended') await ctx.resume();
 
-      // Unlock HTML5 audio for Safari iOS
+      // Unlock HTML5 audio for Safari iOS (fallback path)
       console.log('🔓 Unlocking HTML5 audio for iOS Safari...');
       const silentAudio = new Audio();
       silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAAA==';
@@ -153,8 +194,11 @@ export function useTextToSpeech() {
       catch (e) { console.log('⚠️ HTML5 audio unlock failed (may work anyway):', e); }
 
       setAudioContext(ctx);
+      // Eagerly sync ref so playTextAsAudio below can use the Web Audio path
+      // before the React state update triggers a re-render.
+      audioContextRef.current = ctx;
       setAudioEnabled(true);
-      audioEnabledRef.current = true; // Update ref immediately so playTextAsAudio sees it
+      audioEnabledRef.current = true;
       setShowAudioPrompt(false);
       safeStorage.setItem('audioEnabled', 'true');
       console.log('✓ Audio context initialized');
@@ -162,8 +206,6 @@ export function useTextToSpeech() {
       if (pendingAudioText) {
         console.log('🎵 Playing pending audio text:', pendingAudioText.substring(0, 50) + '...');
         const played = await playTextAsAudio(pendingAudioText);
-        // Only clear if playback succeeded — on failure playTextAsAudio already
-        // restores pendingAudioText so the user can retry via the pending banner.
         if (played) setPendingAudioText(null);
       }
 
@@ -189,6 +231,20 @@ export function useTextToSpeech() {
 
   // Must be called during a user gesture (before recording) to unlock Safari iOS audio
   const unlockAudioForSafari = useCallback(async () => {
+    // Resume AudioContext if it exists but is suspended — this is the returning-user
+    // case where the context was created at mount time (outside a gesture) and iOS
+    // put it into suspended state. Resuming here, inside the user gesture, unblocks
+    // the Web Audio playback path for the rest of the session.
+    const ctx = audioContextRef.current;
+    if (ctx && ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+        console.log('✓ AudioContext resumed on user gesture');
+      } catch (e) {
+        console.warn('⚠️ Failed to resume AudioContext:', e);
+      }
+    }
+
     if (isAudioUnlockingRef.current || blessedAudioRef.current) return;
     isAudioUnlockingRef.current = true;
     try {
@@ -222,6 +278,13 @@ export function useTextToSpeech() {
   }, []);
 
   const stopAudio = useCallback(() => {
+    // Stop Web Audio BufferSource if active
+    const bufferSource = currentBufferSourceRef.current;
+    if (bufferSource) {
+      try { bufferSource.stop(); } catch (e) { /* already stopped */ }
+      currentBufferSourceRef.current = null;
+    }
+    // Stop HTMLAudioElement if active
     const audio = currentPlayingAudioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; currentPlayingAudioRef.current = null; }
     setIsTtsFetching(false);
