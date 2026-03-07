@@ -231,11 +231,22 @@ export function useTextToSpeech() {
 
   // Must be called during a user gesture (before recording) to unlock Safari iOS audio
   const unlockAudioForSafari = useCallback(async () => {
-    // Resume AudioContext if it exists but is suspended — this is the returning-user
-    // case where the context was created at mount time (outside a gesture) and iOS
-    // put it into suspended state. Resuming here, inside the user gesture, unblocks
-    // the Web Audio playback path for the rest of the session.
-    const ctx = audioContextRef.current;
+    // Create or resume an AudioContext inside the user gesture. This is the only
+    // reliable way to unblock Web Audio playback on iOS Safari:
+    //  - First-time users: no context exists yet → create one now (it starts running).
+    //  - Returning users: context was created at mount time outside a gesture → iOS
+    //    suspends it immediately; resume it here so it's running for TTS later.
+    let ctx = audioContextRef.current;
+    if (!ctx || ctx.state === 'closed') {
+      try {
+        ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = ctx; // eagerly sync ref before state update
+        setAudioContext(ctx);
+        console.log('✓ AudioContext created during user gesture');
+      } catch (e) {
+        console.warn('⚠️ Failed to create AudioContext:', e);
+      }
+    }
     if (ctx && ctx.state === 'suspended') {
       try {
         await ctx.resume();
