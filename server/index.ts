@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 
 function log(message: string, source = "express") {
@@ -13,8 +14,24 @@ function log(message: string, source = "express") {
 }
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Heroku terminates TLS at its router; trust one proxy hop so the rate
+// limiter sees real client IPs from X-Forwarded-For.
+app.set("trust proxy", 1);
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+// Every voice turn fans out into several API calls (STT, agent, multiple TTS
+// segments), so the ceiling is generous — it exists to stop abuse, not users.
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 600,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please slow down." },
+  })
+);
 
 app.use((req, res, next) => {
   const start = Date.now();
