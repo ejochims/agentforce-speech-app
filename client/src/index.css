@@ -14,61 +14,61 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 0 0% 100%;
+  --background: 220 25% 99%;
 
-  --foreground: 0 0% 15%;
+  --foreground: 222 28% 13%;
 
-  --border: 0 0% 92%;
+  --border: 220 16% 91%;
 
   --card: 0 0% 100%;
 
-  --card-foreground: 0 0% 15%;
+  --card-foreground: 222 28% 13%;
 
-  --card-border: 0 0% 88%;
+  --card-border: 220 15% 89%;
 
-  --sidebar: 0 0% 98%;
+  --sidebar: 220 20% 98%;
 
-  --sidebar-foreground: 0 0% 15%;
+  --sidebar-foreground: 222 28% 13%;
 
-  --sidebar-border: 0 0% 92%;
+  --sidebar-border: 220 16% 91%;
 
   --sidebar-primary: 210 100% 50%;
 
   --sidebar-primary-foreground: 0 0% 100%;
 
-  --sidebar-accent: 0 0% 95%;
+  --sidebar-accent: 220 16% 95%;
 
-  --sidebar-accent-foreground: 0 0% 15%;
+  --sidebar-accent-foreground: 222 28% 13%;
 
   --sidebar-ring: 210 100% 50%;
 
   --popover: 0 0% 100%;
 
-  --popover-foreground: 0 0% 15%;
+  --popover-foreground: 222 28% 13%;
 
-  --popover-border: 0 0% 92%;
+  --popover-border: 220 16% 91%;
 
   --primary: 210 100% 50%;
 
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 0 0% 96%;
+  --secondary: 220 16% 95%;
 
-  --secondary-foreground: 0 0% 15%;
+  --secondary-foreground: 222 28% 13%;
 
-  --muted: 0 0% 96%;
+  --muted: 220 16% 95%;
 
-  --muted-foreground: 0 0% 55%;
+  --muted-foreground: 220 11% 46%;
 
-  --accent: 0 0% 98%;
+  --accent: 220 20% 97%;
 
-  --accent-foreground: 0 0% 15%;
+  --accent-foreground: 222 28% 13%;
 
   --destructive: 0 84% 60%;
 
   --destructive-foreground: 0 0% 100%;
 
-  --input: 0 0% 75%;
+  --input: 220 13% 78%;
   --ring: 212 100% 50%;
   --chart-1: 212 100% 45%;
   --chart-2: 142 76% 36%;
@@ -121,15 +121,16 @@
   --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
-  --radius: .5rem; /* 8px */
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.02);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.03);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.04), 0px 1px 2px -1px hsl(0 0% 0% / 0.06);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.05), 0px 1px 2px -1px hsl(0 0% 0% / 0.08);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.06), 0px 2px 4px -1px hsl(0 0% 0% / 0.10);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.08), 0px 4px 6px -1px hsl(0 0% 0% / 0.12);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.10), 0px 8px 10px -1px hsl(0 0% 0% / 0.15);
-  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.12);
+  --radius: .75rem; /* 12px */
+  /* Layered shadows: tight key shadow + wide soft ambient, tinted toward the neutral hue */
+  --shadow-2xs: 0 1px 2px hsl(220 30% 10% / 0.03);
+  --shadow-xs: 0 1px 2px hsl(220 30% 10% / 0.04);
+  --shadow-sm: 0 1px 2px hsl(220 30% 10% / 0.04), 0 2px 8px -2px hsl(220 30% 10% / 0.06);
+  --shadow: 0 1px 2px hsl(220 30% 10% / 0.05), 0 4px 12px -4px hsl(220 30% 10% / 0.08);
+  --shadow-md: 0 2px 4px -2px hsl(220 30% 10% / 0.06), 0 6px 16px -4px hsl(220 30% 10% / 0.10);
+  --shadow-lg: 0 2px 4px -2px hsl(220 30% 10% / 0.07), 0 12px 28px -6px hsl(220 30% 10% / 0.13);
+  --shadow-xl: 0 3px 6px -3px hsl(220 30% 10% / 0.08), 0 20px 44px -8px hsl(220 30% 10% / 0.17);
+  --shadow-2xl: 0 24px 56px -12px hsl(220 30% 10% / 0.24);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
@@ -263,14 +264,14 @@
   --voice-error: 0 84% 60%;
   --voice-error-foreground: 0 0% 98%;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.15);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.20);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.25), 0px 1px 2px -1px hsl(0 0% 0% / 0.30);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.30), 0px 1px 2px -1px hsl(0 0% 0% / 0.35);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.35), 0px 2px 4px -1px hsl(0 0% 0% / 0.40);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.40), 0px 4px 6px -1px hsl(0 0% 0% / 0.45);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.45), 0px 8px 10px -1px hsl(0 0% 0% / 0.50);
-  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.50);
+  --shadow-2xs: 0 1px 2px hsl(0 0% 0% / 0.20);
+  --shadow-xs: 0 1px 2px hsl(0 0% 0% / 0.25);
+  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.30), 0 2px 8px -2px hsl(0 0% 0% / 0.35);
+  --shadow: 0 1px 2px hsl(0 0% 0% / 0.32), 0 4px 12px -4px hsl(0 0% 0% / 0.40);
+  --shadow-md: 0 2px 4px -2px hsl(0 0% 0% / 0.35), 0 6px 16px -4px hsl(0 0% 0% / 0.45);
+  --shadow-lg: 0 2px 4px -2px hsl(0 0% 0% / 0.38), 0 12px 28px -6px hsl(0 0% 0% / 0.50);
+  --shadow-xl: 0 3px 6px -3px hsl(0 0% 0% / 0.42), 0 20px 44px -8px hsl(0 0% 0% / 0.55);
+  --shadow-2xl: 0 24px 56px -12px hsl(0 0% 0% / 0.60);
 
 }
 
@@ -281,6 +282,9 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    /* Inter stylistic alternates: open digits, disambiguated l/I, single-storey a */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
   }
 
   /* Mobile App Shell Base Styles */
@@ -610,5 +614,103 @@
 
   @media (prefers-reduced-motion: reduce) {
     .animate-orb-glow { animation: none; }
+  }
+
+  /* Typing indicator — staggered fade/scale pulse */
+  @keyframes typingPulse {
+    0%, 60%, 100% { opacity: 0.25; transform: scale(0.8); }
+    30%           { opacity: 1;    transform: scale(1); }
+  }
+
+  .typing-dot {
+    animation: typingPulse 1.2s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  /* Streaming response caret */
+  @keyframes caretBlink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0; }
+  }
+
+  .streaming-caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 2px;
+    border-radius: 1px;
+    background: hsl(var(--primary));
+    vertical-align: text-bottom;
+    animation: caretBlink 1s steps(2, jump-none) infinite;
+  }
+
+  /* Mic button — slow breathing ripple while idle */
+  @keyframes micBreathe {
+    0%        { transform: scale(1);    opacity: 0.45; }
+    70%, 100% { transform: scale(1.35); opacity: 0; }
+  }
+
+  .animate-mic-breathe {
+    animation: micBreathe 3.2s ease-out infinite;
+    will-change: transform, opacity;
+  }
+
+  /* Glass top-highlight overlay for circular controls — works over any state color */
+  .mic-glass {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04) 48%, rgba(0, 0, 0, 0.06));
+  }
+
+  /* User message bubble — subtle vertical gradient over the primary color */
+  .bubble-user {
+    background-color: hsl(var(--primary));
+    background-image: linear-gradient(180deg, hsl(212 100% 55%), hsl(214 95% 47%));
+  }
+
+  /* Ambient backdrop — slowly drifting blurred color blobs */
+  @keyframes ambientDrift1 {
+    from { transform: translate3d(-6%, -4%, 0) scale(1); }
+    to   { transform: translate3d(6%, 8%, 0) scale(1.18); }
+  }
+
+  @keyframes ambientDrift2 {
+    from { transform: translate3d(8%, 6%, 0) scale(1.1); }
+    to   { transform: translate3d(-6%, -8%, 0) scale(0.92); }
+  }
+
+  .animate-ambient-drift-1 {
+    animation: ambientDrift1 26s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  .animate-ambient-drift-2 {
+    animation: ambientDrift2 34s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  /* Film grain overlay — breaks up flat color fields */
+  .grain-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+    opacity: 0.03;
+    mix-blend-mode: overlay;
+  }
+
+  .dark .grain-overlay {
+    opacity: 0.05;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .typing-dot,
+    .streaming-caret,
+    .animate-mic-breathe,
+    .animate-ambient-drift-1,
+    .animate-ambient-drift-2 {
+      animation: none;
+    }
+
+    .animate-mic-breathe { opacity: 0; }
   }
 }

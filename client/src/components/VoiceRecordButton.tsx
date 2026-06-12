@@ -16,6 +16,7 @@ interface VoiceRecordButtonProps {
   onRecordingStart?: () => void;
   onRecordingStop?: (audioBlob?: Blob) => void;
   onError?: (error: string) => void;
+  onStreamChange?: (stream: MediaStream | null) => void; // Live mic stream for external visualization
   disabled?: boolean;
   state?: RecordingState;
   error?: string;
@@ -29,6 +30,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   onRecordingStart,
   onRecordingStop,
   onError,
+  onStreamChange,
   disabled = false,
   state = 'idle',
   error,
@@ -111,6 +113,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setLiveStream(stream);
+      onStreamChange?.(stream);
       console.log('Got media stream:', stream);
       
       // Force webm format for better compatibility with OpenAI Whisper
@@ -136,6 +139,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
       recorder.onstop = () => {
         console.log('MediaRecorder stopped, processing audio...');
         setLiveStream(null);
+        onStreamChange?.(null);
 
         // Only process if we have audio chunks (not cancelled)
         if (audioChunks.current.length > 0) {
@@ -342,21 +346,21 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
   };
 
   const getButtonClassName = () => {
-    const baseClasses = 'w-20 h-20 rounded-full transition-all duration-300 relative overflow-visible touch-target';
-    
+    const baseClasses = 'w-20 h-20 rounded-full transition-all duration-300 relative overflow-visible touch-target mic-glass';
+
     if (disabled) {
       return `${baseClasses} bg-recording-inactive text-recording-inactive-foreground cursor-not-allowed`;
     }
-    
+
     switch (state) {
       case 'recording':
-        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-lg shadow-recording-active/20`;
+        return `${baseClasses} bg-recording-active text-recording-active-foreground shadow-[0_10px_32px_-6px_hsl(var(--recording-active)/0.55)]`;
       case 'processing':
-        return `${baseClasses} bg-voice-processing text-voice-processing-foreground cursor-wait`;
+        return `${baseClasses} bg-voice-processing text-voice-processing-foreground cursor-wait shadow-[0_10px_32px_-6px_hsl(var(--voice-processing)/0.5)]`;
       case 'error':
-        return `${baseClasses} bg-voice-error text-voice-error-foreground hover-elevate`;
+        return `${baseClasses} bg-voice-error text-voice-error-foreground hover-elevate shadow-[0_10px_32px_-6px_hsl(var(--voice-error)/0.5)]`;
       default:
-        return `${baseClasses} bg-voice-primary text-voice-primary-foreground hover-elevate active-elevate-2`;
+        return `${baseClasses} bg-voice-primary text-voice-primary-foreground hover-elevate active-elevate-2 shadow-[0_10px_32px_-6px_hsl(var(--voice-primary)/0.45)]`;
     }
   };
   
@@ -445,6 +449,11 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
             {state === 'recording' && (
               <div className="absolute inset-0 rounded-full border-2 border-recording-active animate-recording-pulse opacity-75" />
             )}
+
+            {/* Slow breathing ripple while idle */}
+            {state === 'idle' && !disabled && (
+              <div className="absolute inset-0 rounded-full border-2 border-voice-primary/40 animate-mic-breathe pointer-events-none" aria-hidden="true" />
+            )}
           </Button>
         </motion.div>
       </div>
@@ -455,7 +464,7 @@ const VoiceRecordButton = forwardRef<VoiceRecordButtonHandle, VoiceRecordButtonP
           <>
             <p
               id="recording-instructions"
-              className={`text-sm font-medium transition-colors duration-200 ${
+              className={`text-sm font-medium tabular-nums transition-colors duration-200 ${
                 state === 'error'
                   ? 'text-destructive'
                   : state === 'recording' && recordingDuration >= maxDuration - 10
