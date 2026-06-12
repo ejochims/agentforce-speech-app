@@ -19,6 +19,8 @@ interface MessageBubbleProps {
   showAvatar?: boolean;
   showTimestamp?: boolean;
   isPlaying?: boolean;
+  /** Renders a blinking caret after the message content while streaming */
+  showCaret?: boolean;
   onRetry?: () => void;
 }
 
@@ -33,6 +35,7 @@ export default function MessageBubble({
   showAvatar = true,
   showTimestamp = true,
   isPlaying = false,
+  showCaret = false,
   onRetry,
 }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
@@ -102,7 +105,7 @@ export default function MessageBubble({
             relative px-lg py-md break-words shadow-sm
             ${isUser
               ? `
-                bg-primary text-primary-foreground
+                bubble-user text-primary-foreground
                 ${isFirstInGroup
                   ? 'rounded-l-2xl rounded-tr-2xl rounded-br-md'
                   : isLastInGroup
@@ -122,7 +125,6 @@ export default function MessageBubble({
             }
             ${messageState === 'error' ? 'ring-2 ring-destructive/20' : ''}
           `}
-          style={!isUser ? { borderLeftWidth: '3px', borderLeftColor: 'hsl(var(--primary) / 0.3)' } : undefined}
           aria-live={!isUser && !isTyping ? 'polite' : undefined}
         >
           {/* Screen reader text */}
@@ -146,10 +148,10 @@ export default function MessageBubble({
           )}
 
           {isTyping ? (
-            <div className="flex gap-1 items-center py-1" aria-hidden="true">
-              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+            <div className="flex gap-1.5 items-center py-1" aria-hidden="true">
+              <div className="w-2 h-2 bg-muted-foreground/80 rounded-full typing-dot" />
+              <div className="w-2 h-2 bg-muted-foreground/80 rounded-full typing-dot [animation-delay:0.2s]" />
+              <div className="w-2 h-2 bg-muted-foreground/80 rounded-full typing-dot [animation-delay:0.4s]" />
               <span className="sr-only">{isUser ? 'You are typing' : 'Agentforce is typing'}</span>
             </div>
           ) : (
@@ -159,10 +161,11 @@ export default function MessageBubble({
                   {message}
                 </p>
               ) : (
-                <div className="text-base leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-pre:bg-muted prose-pre:p-3 prose-pre:rounded-lg prose-pre:text-sm prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:italic prose-a:text-primary prose-a:underline prose-strong:font-semibold prose-p:leading-relaxed" aria-describedby={formattedTimestamp ? `timestamp-agent` : undefined}>
+                <div className={`text-base leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:font-semibold prose-headings:tracking-tight prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono prose-pre:bg-muted prose-pre:p-3 prose-pre:rounded-lg prose-pre:text-sm prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:italic prose-a:text-primary prose-a:underline prose-strong:font-semibold prose-p:leading-relaxed${showCaret ? ' [&>p:last-of-type]:inline' : ''}`} aria-describedby={formattedTimestamp ? `timestamp-agent` : undefined}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {message}
                   </ReactMarkdown>
+                  {showCaret && <span className="streaming-caret" aria-hidden="true" />}
                 </div>
               )}
 

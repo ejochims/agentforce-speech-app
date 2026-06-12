@@ -16,22 +16,45 @@ const STATE_COLORS: Record<OrbState, { rgb: string; conversationAlpha: number; v
 };
 
 export default function AmbientGradient({ orbState, showConversation }: AmbientGradientProps) {
+  const { rgb } = STATE_COLORS[orbState];
+
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true" style={{ zIndex: 0 }}>
       {(Object.entries(STATE_COLORS) as [OrbState, (typeof STATE_COLORS)[OrbState]][]).map(
-        ([state, { rgb, conversationAlpha, voiceAlpha }]) => (
+        ([state, { rgb: stateRgb, conversationAlpha, voiceAlpha }]) => (
           <div
             key={state}
             className="absolute inset-0 transition-opacity duration-700"
             style={{
               opacity: orbState === state ? 1 : 0,
               background: showConversation
-                ? `radial-gradient(ellipse 120% 25% at 50% 0%, rgba(${rgb},${conversationAlpha}) 0%, transparent 100%)`
-                : `radial-gradient(ellipse 85% 60% at 50% 38%, rgba(${rgb},${voiceAlpha}) 0%, transparent 68%)`,
+                ? `radial-gradient(ellipse 120% 25% at 50% 0%, rgba(${stateRgb},${conversationAlpha}) 0%, transparent 100%)`
+                : `radial-gradient(ellipse 85% 60% at 50% 38%, rgba(${stateRgb},${voiceAlpha}) 0%, transparent 68%)`,
             }}
           />
         )
       )}
+
+      {/* Slowly drifting blurred blobs — backgroundColor (unlike gradients) cross-fades
+          via CSS transition when the state color changes */}
+      <div
+        className="absolute left-[5%] top-[10%] w-[46vw] h-[46vw] max-w-[560px] max-h-[560px] rounded-full animate-ambient-drift-1"
+        style={{
+          backgroundColor: `rgba(${rgb},${showConversation ? 0.04 : 0.1})`,
+          filter: 'blur(90px)',
+          transition: 'background-color 700ms ease',
+        }}
+      />
+      <div
+        className="absolute right-[2%] bottom-[12%] w-[38vw] h-[38vw] max-w-[460px] max-h-[460px] rounded-full animate-ambient-drift-2"
+        style={{
+          backgroundColor: `rgba(${rgb},${showConversation ? 0.03 : 0.08})`,
+          filter: 'blur(80px)',
+          transition: 'background-color 700ms ease',
+        }}
+      />
+
+      <div className="grain-overlay" />
     </div>
   );
 }

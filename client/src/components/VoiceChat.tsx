@@ -21,6 +21,7 @@ import { useAgentStream } from '@/hooks/useAgentStream';
 import { usePipelineTransparency } from '@/hooks/usePipelineTransparency';
 import { useConversation } from '@/hooks/useConversation';
 import { useWakeWord } from '@/hooks/useWakeWord';
+import { useMicLevel } from '@/hooks/useMicLevel';
 import VoiceRecordButton, { type VoiceRecordButtonHandle } from './VoiceRecordButton';
 import type { Turn } from '@shared/schema';
 
@@ -54,6 +55,10 @@ export default function VoiceChat() {
 
   // Ref to VoiceRecordButton so the wake word handler can start recording programmatically
   const voiceRecordRef = useRef<VoiceRecordButtonHandle>(null);
+
+  // Live mic stream (while recording) → RMS level ref that drives the orb's amplitude
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const micLevelRef = useMicLevel(micStream);
 
   // ─── Scroll tracking ──────────────────────────────────────────────────────
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -157,28 +162,33 @@ export default function VoiceChat() {
 
 
   // ─── Event handlers ───────────────────────────────────────────────────────
-  const handleTextMessage = async () => {
-    if (!textMessage.trim() || !conversation.currentConversationId) return;
+  const sendTextMessage = (messageText: string) => {
+    if (!messageText.trim() || !conversation.currentConversationId) return false;
     // Unlock AudioContext during this user gesture so TTS works when the
     // agent responds (iOS Safari suspends AudioContext outside gestures).
     tts.stopAudio();
     tts.unlockAudioForSafari();
-    setIsProcessing(true);
 
-    const messageText = textMessage;
     const pipelineId = `pipeline-${Date.now()}`;
     transparency.startEvent(pipelineId, messageText, undefined, tts.audioEnabled);
 
+    const pendingId = `pending-${Date.now()}-${Math.random()}`;
+    conversation.createTurn({
+      conversationId: conversation.currentConversationId,
+      role: 'user',
+      text: messageText,
+      triggerAgent: true,
+      pendingId,
+    });
+    return true;
+  };
+
+  const handleTextMessage = async () => {
+    setIsProcessing(true);
     try {
-      const pendingId = `pending-${Date.now()}-${Math.random()}`;
-      conversation.createTurn({
-        conversationId: conversation.currentConversationId,
-        role: 'user',
-        text: messageText,
-        triggerAgent: true,
-        pendingId,
-      });
-      setTextMessage('');
+      if (sendTextMessage(textMessage)) {
+        setTextMessage('');
+      }
     } catch (error) {
       console.error('Error sending text message:', error);
     } finally {
@@ -328,15 +338,15 @@ export default function VoiceChat() {
               className="w-8 h-8 object-contain flex-shrink-0"
               data-testid="img-header-logo"
             />
-            <h1 className="text-xl font-semibold text-foreground truncate" data-testid="text-agentforce-title">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground truncate" data-testid="text-agentforce-title">
               Agentforce
             </h1>
             {/* Session status badge — only shown when connected to live Agentforce */}
             {settings && settings.agentforceMode !== 'stub' && (
               <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${
                 conversation.turns.length > 0 || agentStream.isAgentStreaming
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : 'bg-blue-50 border-blue-200 text-blue-600'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300'
+                  : 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/60 dark:border-blue-800 dark:text-blue-300'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   conversation.turns.length > 0 || agentStream.isAgentStreaming
@@ -351,7 +361,7 @@ export default function VoiceChat() {
 
             {/* Wake word active indicator — inside the left group so layout stays 2-column */}
             {wakeWordListening && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 border-violet-200 text-violet-700 select-none flex-shrink-0">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 border-violet-200 text-violet-700 dark:bg-violet-950/60 dark:border-violet-800 dark:text-violet-300 select-none flex-shrink-0">
                 <Radio className="w-2.5 h-2.5 animate-pulse" />
                 <span className="hidden sm:inline">Hey Agentforce</span>
               </span>
@@ -441,7 +451,7 @@ export default function VoiceChat() {
       <main
         ref={(el) => { scrollContainerRef.current = el; }}
         onScroll={handleScroll}
-        className={`app-content relative flex-1 transition-all duration-700 ${showTransparency ? 'md:pr-80' : ''}`}
+        className={`app-content relative flex-1 transition-[padding] duration-300 ease-out ${showTransparency ? 'md:pr-80' : ''}`}
         style={!showConversation ? { overflow: 'visible' } : undefined}
         role="main"
         aria-label="Chat conversation"
@@ -553,14 +563,33 @@ export default function VoiceChat() {
             <div className="flex flex-col items-center justify-center h-full text-center px-xl select-none">
               <div className="mb-2xl">
                 <div className="flex justify-center mb-xl" data-testid="img-agentforce-logo">
-                  <AmbientOrb state={orbState} logoSrc={agentforceLogo} size={128} />
+                  <AmbientOrb state={orbState} logoSrc={agentforceLogo} size={128} levelRef={micLevelRef} />
                 </div>
-                <h2 className="text-xl font-semibold text-foreground mb-sm" data-testid="text-main-title">
+                <h2 className="text-xl font-semibold tracking-tight text-foreground mb-sm" data-testid="text-main-title">
                   Talk to Agentforce
                 </h2>
                 <p className="text-sm text-muted-foreground" data-testid="text-instructions">
-                  Tap the mic to begin
+                  Tap the mic to begin, or try one of these
                 </p>
+                <div className="flex flex-wrap justify-center gap-sm mt-lg">
+                  {[
+                    'What can you help me with?',
+                    'Tell me about yourself',
+                    'How does this work?',
+                  ].map((suggestion, i) => (
+                    <motion.button
+                      key={suggestion}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 + i * 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                      onClick={() => sendTextMessage(suggestion)}
+                      className="px-lg py-sm rounded-full border border-border bg-card/70 backdrop-blur-sm text-sm text-muted-foreground shadow-xs hover:text-foreground hover:border-primary/30 hover:shadow-sm transition-all duration-200"
+                      data-testid={`button-suggestion-${i}`}
+                    >
+                      {suggestion}
+                    </motion.button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -660,7 +689,7 @@ export default function VoiceChat() {
               {agentStream.isAgentStreaming && agentStream.streamingText ? (
                 <div aria-busy="true" aria-live="polite" role="status" aria-label="Agent is responding">
                   <MessageBubble
-                    message={agentStream.streamingText + '▌'}
+                    message={agentStream.streamingText}
                     isUser={false}
                     isTyping={false}
                     isFirstInGroup={true}
@@ -669,6 +698,7 @@ export default function VoiceChat() {
                     showTimestamp={false}
                     messageState="sent"
                     isPlaying={tts.isAudioPlaying}
+                    showCaret={true}
                   />
                 </div>
               ) : (agentStream.agentPending || agentStream.isAgentStreaming) && (
@@ -702,16 +732,16 @@ export default function VoiceChat() {
           >
 
             {/* ── Ambient Orb ── */}
-            <AmbientOrb state={orbState} logoSrc={agentforceLogo} size={192} />
+            <AmbientOrb state={orbState} logoSrc={agentforceLogo} size={192} levelRef={micLevelRef} />
 
             {/* ── Status text ── */}
             <div className="text-center space-y-2">
               <p className={`text-2xl font-light tracking-wide transition-colors duration-500 ${
-                isRecording         ? 'text-blue-600' :
-                isSttProcessing     ? 'text-amber-600' :
-                effectivelyThinking ? 'text-purple-600' :
-                isSpeaking          ? 'text-emerald-600' :
-                                      'text-gray-400'
+                isRecording         ? 'text-blue-600 dark:text-blue-400' :
+                isSttProcessing     ? 'text-amber-600 dark:text-amber-400' :
+                effectivelyThinking ? 'text-purple-600 dark:text-purple-400' :
+                isSpeaking          ? 'text-emerald-600 dark:text-emerald-400' :
+                                      'text-muted-foreground/70'
               }`}>
                 {isRecording         ? 'Listening...' :
                  isSttProcessing     ? 'Processing...' :
@@ -720,14 +750,14 @@ export default function VoiceChat() {
                                        'Ready'}
               </p>
               {!isRecording && !isSttProcessing && !effectivelyThinking && !isSpeaking && (
-                <p className="text-sm text-gray-300">
+                <p className="text-sm text-muted-foreground/50">
                   {wakeWordListening ? 'Say "Hey Agentforce" or tap the mic' : 'Tap the mic to start'}
                 </p>
               )}
               {conversation.turns.length > 0 && !isRecording && !isSttProcessing && !effectivelyThinking && !isSpeaking && (
                 <button
                   onClick={handleStartNewChat}
-                  className="text-xs text-gray-300 hover:text-gray-500 transition-colors duration-200 mt-2"
+                  className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors duration-200 mt-2"
                   aria-label="Start a new conversation"
                 >
                   + New conversation
@@ -852,6 +882,7 @@ export default function VoiceChat() {
                   onRecordingStart={handleFirstRecordingStart}
                   onRecordingStop={recorder.handleRecordingStop}
                   onError={recorder.handleRecordingError}
+                  onStreamChange={setMicStream}
                   disabled={conversation.isValidatingConversation}
                   state={recorder.recordingState}
                   error={recorder.recordingError || undefined}
@@ -880,7 +911,7 @@ export default function VoiceChat() {
                   showTextInput
                     ? 'text-primary bg-primary/10'
                     : !showConversation
-                    ? 'text-gray-400 hover:text-gray-600'
+                    ? 'text-muted-foreground/60 hover:text-muted-foreground'
                     : 'text-muted-foreground'
                 }`}
                 data-testid="button-toggle-text-input"
