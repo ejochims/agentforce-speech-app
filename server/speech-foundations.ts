@@ -1,11 +1,8 @@
-interface SpeechTokenResponse {
-  access_token: string;
-  instance_url: string;
-  token_type: string;
-  issued_at: string;
-  scope: string;
-  token_format: string;
-}
+import { SalesforceTokenManager, fetchWithTimeout } from './salesforce-oauth';
+
+// STT/TTS calls upload or synthesize audio and can legitimately take a while,
+// but must not hang forever if Salesforce is unresponsive.
+const API_TIMEOUT_MS = 60_000;
 
 interface TranscriptionResponse {
   transcription: string[];
@@ -21,10 +18,7 @@ export class SpeechFoundationsClient {
   private domainUrl: string;
   private consumerKey: string;
   private consumerSecret: string;
-  private accessToken: string | null = null;
-  private tokenExpiry: number | null = null;
-  // Serialises concurrent token refreshes — only one OAuth request in flight at a time
-  private tokenRefreshPromise: Promise<string> | null = null;
+  private tokenManager: SalesforceTokenManager;
 
   private configured = false;
 
@@ -38,16 +32,22 @@ export class SpeechFoundationsClient {
     if (!this.configured) {
       console.warn('⚠️  Salesforce Speech environment variables not set — STT/TTS will be unavailable');
       this.domainUrl = '';
-      return;
+    } else {
+      // Ensure the domain URL has a protocol
+      if (!domainUrl.startsWith('http://') && !domainUrl.startsWith('https://')) {
+        domainUrl = `https://${domainUrl}`;
+      }
+
+      // Remove trailing slash if present
+      this.domainUrl = domainUrl.replace(/\/$/, '');
     }
 
-    // Ensure the domain URL has a protocol
-    if (!domainUrl.startsWith('http://') && !domainUrl.startsWith('https://')) {
-      domainUrl = `https://${domainUrl}`;
-    }
-
-    // Remove trailing slash if present
-    this.domainUrl = domainUrl.replace(/\/$/, '');
+    this.tokenManager = new SalesforceTokenManager({
+      domainUrl: this.domainUrl,
+      clientId: this.consumerKey,
+      clientSecret: this.consumerSecret,
+      label: 'Speech Foundations',
+    });
   }
 
   private ensureConfigured() {
@@ -58,54 +58,8 @@ export class SpeechFoundationsClient {
 
   private async getAccessToken(): Promise<string> {
     this.ensureConfigured();
-    // Fast path — valid token already cached
-    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
-    }
-    // If a refresh is already in flight, wait for it instead of issuing a second one
-    if (this.tokenRefreshPromise) {
-      return this.tokenRefreshPromise;
-    }
-    this.tokenRefreshPromise = this.fetchNewToken().finally(() => {
-      this.tokenRefreshPromise = null;
-    });
-    return this.tokenRefreshPromise;
-  }
-
-  private async fetchNewToken(): Promise<string> {
-    const url = `${this.domainUrl}/services/oauth2/token`;
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: this.consumerKey,
-      client_secret: this.consumerSecret,
-    });
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: body.toString(),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Speech Foundations authentication failed: ${response.status} ${errorText}`);
-      }
-
-      const data: SpeechTokenResponse = await response.json();
-      this.accessToken = data.access_token;
-
-      // Set token expiry to 25 minutes from now (tokens are valid for 30 minutes)
-      this.tokenExpiry = Date.now() + 25 * 60 * 1000;
-
-      console.log('✅ Speech Foundations token obtained successfully');
-      return this.accessToken;
-    } catch (error) {
-      console.error('❌ Failed to get Speech Foundations token:', error);
-      throw error;
-    }
+    const token = await this.tokenManager.getToken();
+    return token.accessToken;
   }
 
   async transcribeAudio(audioBuffer: Buffer, mimeType: string, language: string = 'english'): Promise<string> {
@@ -119,7 +73,7 @@ export class SpeechFoundationsClient {
 
     console.log('🎤 Calling Einstein Transcribe API...');
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       'https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/transcriptions',
       {
         method: 'POST',
@@ -129,7 +83,8 @@ export class SpeechFoundationsClient {
           'x-client-feature-id': 'external-edc',
         },
         body: formData,
-      }
+      },
+      API_TIMEOUT_MS
     );
 
     if (!response.ok) {
@@ -161,7 +116,7 @@ export class SpeechFoundationsClient {
 
     console.log('🔊 Calling Einstein Speech API (ElevenLabs)...', { text: text.substring(0, 50) + '...', voiceId });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       'https://api.salesforce.com/einstein/platform/v1/models/transcribeInternalV1/speech-synthesis',
       {
         method: 'POST',
@@ -171,7 +126,8 @@ export class SpeechFoundationsClient {
           'x-client-feature-id': 'external-edc',
         },
         body: formData,
-      }
+      },
+      API_TIMEOUT_MS
     );
 
     if (!response.ok) {
