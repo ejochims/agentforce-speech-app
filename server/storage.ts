@@ -156,4 +156,17 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+async function createStorage(): Promise<IStorage> {
+  if (process.env.DATABASE_URL) {
+    // Lazy import keeps the pg driver out of the bundle path when it isn't used
+    const { PostgresStorage } = await import("./pg-storage");
+    console.log("💾 Storage: PostgreSQL (DATABASE_URL is set)");
+    return new PostgresStorage(process.env.DATABASE_URL);
+  }
+  console.warn(
+    "💾 Storage: in-memory (set DATABASE_URL to persist data across restarts)"
+  );
+  return new MemStorage();
+}
+
+export const storage: IStorage = await createStorage();
