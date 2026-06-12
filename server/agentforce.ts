@@ -1,13 +1,9 @@
 import { randomUUID } from 'crypto';
+import { SalesforceTokenManager, fetchWithTimeout } from './salesforce-oauth';
 
-interface AgentforceTokenResponse {
-  access_token: string;
-  instance_url: string;
-  id: string;
-  token_type: string;
-  issued_at: string;
-  signature: string;
-}
+// Covers connection + response headers on Agentforce API calls so a slow or
+// unreachable Salesforce instance can't hang requests indefinitely.
+const API_TIMEOUT_MS = 60_000;
 
 interface AgentforceSessionResponse {
   sessionId: string;
@@ -45,11 +41,8 @@ export class AgentforceClient {
   private consumerKey: string;
   private consumerSecret: string;
   private agentId: string;
-  private accessToken: string | null = null;
-  private tokenExpiry: number | null = null;
   private instanceUrl: string | null = null;
-  // Serialises concurrent token refreshes — only one OAuth request in flight at a time
-  private tokenRefreshPromise: Promise<string> | null = null;
+  private tokenManager: SalesforceTokenManager;
   // Tracks the next sequenceId to use per active session
   private sessionSequenceIds: Map<string, number> = new Map();
 
@@ -62,6 +55,13 @@ export class AgentforceClient {
     this.agentId = process.env.SALESFORCE_AGENT_ID || '';
 
     this.configured = !!(this.domainUrl && this.consumerKey && this.consumerSecret && this.agentId);
+
+    this.tokenManager = new SalesforceTokenManager({
+      domainUrl: this.domainUrl,
+      clientId: this.consumerKey,
+      clientSecret: this.consumerSecret,
+      label: 'Agentforce',
+    });
 
     if (!this.configured) {
       console.warn('⚠️  Salesforce environment variables not set — Agentforce will run in stub mode');
@@ -76,55 +76,9 @@ export class AgentforceClient {
 
   private async getAccessToken(): Promise<string> {
     this.ensureConfigured();
-    // Fast path — valid token already cached
-    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
-    }
-    // If a refresh is already in flight, wait for it instead of issuing a second one
-    if (this.tokenRefreshPromise) {
-      return this.tokenRefreshPromise;
-    }
-    this.tokenRefreshPromise = this.fetchNewToken().finally(() => {
-      this.tokenRefreshPromise = null;
-    });
-    return this.tokenRefreshPromise;
-  }
-
-  private async fetchNewToken(): Promise<string> {
-    const url = `${this.domainUrl}/services/oauth2/token`;
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: this.consumerKey,
-      client_secret: this.consumerSecret,
-    });
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: body.toString(),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Authentication failed: ${response.status} ${errorText}`);
-      }
-
-      const data: AgentforceTokenResponse = await response.json();
-      this.accessToken = data.access_token;
-      this.instanceUrl = data.instance_url;
-      // Set expiry to 25 minutes from now (tokens typically last 30 minutes)
-      this.tokenExpiry = Date.now() + (25 * 60 * 1000);
-      
-      console.log('OAuth successful - instance URL:', this.instanceUrl);
-      
-      return this.accessToken;
-    } catch (error) {
-      console.error('Failed to get Salesforce access token:', error);
-      throw error;
-    }
+    const token = await this.tokenManager.getToken();
+    this.instanceUrl = token.instanceUrl || null;
+    return token.accessToken;
   }
 
   private async makeApiCall(endpoint: string, method: 'GET' | 'POST' | 'DELETE', body?: any): Promise<any> {
@@ -151,8 +105,8 @@ export class AgentforceClient {
     }
 
     try {
-      const response = await fetch(url, options);
-      
+      const response = await fetchWithTimeout(url, options, API_TIMEOUT_MS);
+
       // For DELETE requests, 204 is success
       if (method === 'DELETE' && response.status === 204) {
         return { success: true };
@@ -236,7 +190,7 @@ export class AgentforceClient {
     const sequenceId = this.sessionSequenceIds.get(sessionId) ?? 1;
     this.sessionSequenceIds.set(sessionId, sequenceId + 1);
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -246,7 +200,7 @@ export class AgentforceClient {
       body: JSON.stringify({
         message: { sequenceId, type: 'Text', text: message },
       }),
-    });
+    }, API_TIMEOUT_MS);
 
     if (!response.ok) {
       const errorText = await response.text();

@@ -175,6 +175,11 @@ export function useTextToSpeech() {
           if (audio.ended) {
             console.log('✓ Audio ended via pause fallback (Safari iOS)');
             onEnded();
+          } else if (generation !== ttsGenerationRef.current) {
+            // stopAudio() paused us mid-playback — settle the promise and stop
+            // polling instead of leaking the interval and hanging the caller.
+            console.log('⏹ Audio cancelled by stopAudio()');
+            done(false);
           }
         };
 
@@ -209,7 +214,11 @@ export function useTextToSpeech() {
             // Safari iOS sometimes never fires 'ended' or 'pause+ended' for
             // streamed audio. Poll every 250 ms as a guaranteed escape hatch.
             safariPoll = setInterval(() => {
-              if (audio.ended || (audio.duration > 0 && audio.currentTime >= audio.duration)) {
+              if (generation !== ttsGenerationRef.current) {
+                // Cancelled while playing — guaranteed cleanup even if no
+                // pause/ended event ever fires.
+                done(false);
+              } else if (audio.ended || (audio.duration > 0 && audio.currentTime >= audio.duration)) {
                 console.warn('⚠️ audio.ended detected via poll (Safari fallback)');
                 onEnded();
               }

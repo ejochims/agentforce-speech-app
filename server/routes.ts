@@ -12,6 +12,22 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { z } from "zod";
+
+// Caps keep a single request from monopolising Salesforce API quota.
+const MAX_TTS_TEXT_LENGTH = 4000;
+const MAX_AGENT_TEXT_LENGTH = 4000;
+
+const agentRequestSchema = z.object({
+  text: z.string().trim().min(1, 'Text is required').max(MAX_AGENT_TEXT_LENGTH),
+  conversationId: z.string().min(1, 'ConversationId is required'),
+});
+
+const ttsTextSchema = z.string().trim().min(1, 'Text is required').max(MAX_TTS_TEXT_LENGTH);
+
+const updateTitleSchema = z.object({
+  title: z.string().trim().min(1, 'title is required').max(200),
+});
 
 // Configure multer for audio file uploads
 const upload = multer({
@@ -88,16 +104,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/conversations/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { title } = req.body;
-      if (!title || typeof title !== 'string' || !title.trim()) {
+      const parsed = updateTitleSchema.safeParse(req.body);
+      if (!parsed.success) {
         return res.status(400).json({ error: 'title is required' });
       }
+      const { title } = parsed.data;
       const conversation = await storage.getConversation(id);
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
-      await storage.updateConversationTitle(id, title.trim());
-      res.json({ ...conversation, title: title.trim() });
+      await storage.updateConversationTitle(id, title);
+      res.json({ ...conversation, title });
     } catch (error) {
       console.error('Error updating conversation title:', error);
       res.status(500).json({ error: 'Failed to update conversation' });
@@ -228,11 +245,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Text-to-Speech using Einstein Speech V2 with ElevenLabs voices
   app.get('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'allison' } = req.query;
+      const { text: rawText, voice = 'allison' } = req.query;
 
-      if (!text || typeof text !== 'string') {
-        return res.status(400).json({ error: 'Text is required' });
+      const parsedText = ttsTextSchema.safeParse(rawText);
+      if (!parsedText.success) {
+        return res.status(400).json({ error: parsedText.error.issues[0]?.message || 'Text is required' });
       }
+      const text = parsedText.data;
 
       // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice as string] || voiceMapping['allison'];
@@ -283,11 +302,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Keep POST endpoint for backward compatibility
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, voice = 'allison' } = req.body;
-      
-      if (!text) {
-        return res.status(400).json({ error: 'Text is required' });
+      const { text: rawText, voice = 'allison' } = req.body;
+
+      const parsedText = ttsTextSchema.safeParse(rawText);
+      if (!parsedText.success) {
+        return res.status(400).json({ error: parsedText.error.issues[0]?.message || 'Text is required' });
       }
+      const text = parsedText.data;
 
       // Map voice name to ElevenLabs voice ID
       const voiceId = voiceMapping[voice] || voiceMapping['allison'];
@@ -335,10 +356,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let sessionPersisted = true;
 
     try {
-      const { text, conversationId } = req.body;
-
-      if (!text) return res.status(400).json({ error: 'Text is required' });
-      if (!conversationId) return res.status(400).json({ error: 'ConversationId is required' });
+      const parsed = agentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid request' });
+      }
+      const { text, conversationId } = parsed.data;
 
       const conversation = await storage.getConversation(conversationId);
       if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
@@ -437,15 +459,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const pipelineStart = Date.now();
 
     try {
-      const { text, conversationId } = req.body;
-
-      if (!text) {
-        return res.status(400).json({ error: 'Text is required' });
+      const parsed = agentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid request' });
       }
-
-      if (!conversationId) {
-        return res.status(400).json({ error: 'ConversationId is required' });
-      }
+      const { text, conversationId } = parsed.data;
 
       // Get the conversation to check for existing sessionId
       const conversation = await storage.getConversation(conversationId);

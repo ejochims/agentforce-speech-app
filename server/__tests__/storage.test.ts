@@ -226,7 +226,7 @@ describe('MemStorage', () => {
     it('returns default settings on first call', async () => {
       const settings = await storage.getSettings();
       expect(settings.id).toBe('default');
-      expect(settings.voice).toBe('alloy');
+      expect(settings.voice).toBe('allison');
       expect(settings.language).toBe('en-US');
       expect(settings.sttProvider).toBe('salesforce');
       expect(settings.ttsProvider).toBe('salesforce');

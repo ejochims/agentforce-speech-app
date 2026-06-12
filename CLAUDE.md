@@ -72,9 +72,11 @@ Three-tier TypeScript PWA deployed to Heroku:
 | POST | `/api/agentforce/stream` | Text + conversationId → SSE chunks of agent response |
 | GET/PUT | `/api/settings` | App settings |
 
+All `/api` routes are rate-limited (600 req / 15 min per IP, configured in [index.ts](server/index.ts)) and JSON bodies are capped at 1MB. Agentforce and TTS text inputs are Zod-validated with a 4000-char cap.
+
 ## Salesforce Integration
 
-Two independent OAuth2 client-credentials connections (both use token caching with 25-min expiry, lazy token-refresh serialization to prevent duplicate OAuth requests):
+Two independent OAuth2 client-credentials connections, both built on the shared `SalesforceTokenManager` in [salesforce-oauth.ts](server/salesforce-oauth.ts) (token caching with 25-min expiry, refresh serialization to prevent duplicate OAuth requests). All Salesforce fetches go through `fetchWithTimeout` — 15s for OAuth, 60s for API calls (covers connection + headers only, so SSE bodies stream freely):
 
 **Agentforce** — env vars: `SALESFORCE_DOMAIN_URL`, `SALESFORCE_CONSUMER_KEY`, `SALESFORCE_CONSUMER_SECRET`, `SALESFORCE_AGENT_ID`
 - API base: `https://api.salesforce.com/einstein/ai-agent/v1`
@@ -110,11 +112,11 @@ The `AgentforceClient` handles multiple response shapes:
 
 ## Storage
 
-`MemStorage` (default) holds all data in in-memory Maps — data is lost on server restart. The `IStorage` interface in [storage.ts](server/storage.ts) defines all CRUD methods; a PostgreSQL implementation only needs to implement that interface and replace the `storage` export.
+The `storage` singleton is selected at startup: `PostgresStorage` ([pg-storage.ts](server/pg-storage.ts), Drizzle + `pg`) when `DATABASE_URL` is set, otherwise `MemStorage` (in-memory Maps, data lost on restart). Both implement the `IStorage` interface in [storage.ts](server/storage.ts).
 
-Default settings: `voice: "allison"`, `language: "en-US"`, `sttProvider: "salesforce"`, `ttsProvider: "salesforce"`, `agentforceMode: "stub"`.
+Default settings: `voice: "allison"`, `language: "en-US"`, `sttProvider: "salesforce"`, `ttsProvider: "salesforce"`, `agentforceMode: "stub"` (MemStorage) / `"real"` (PostgreSQL schema default).
 
-Database schema lives in [shared/schema.ts](shared/schema.ts). Run `npm run db:push` with `DATABASE_URL` set to apply it to PostgreSQL.
+Database schema lives in [shared/schema.ts](shared/schema.ts). Run `npm run db:push` with `DATABASE_URL` set to apply it to PostgreSQL before first use.
 
 ## Audio Handling
 

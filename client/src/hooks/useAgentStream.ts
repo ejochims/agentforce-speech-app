@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { findFirstSentenceEnd } from '@/lib/sentence';
 import type { TransparencyData } from '@/components/AgentTransparencyPanel';
 
 interface PipelineRef {
@@ -116,13 +117,13 @@ export function useAgentStream({
             // Start TTS on the first complete sentence to overlap agent generation with
             // speech playback. earlyTtsLength records the position so the 'done' handler
             // can speak only the remaining text, avoiding any duplicate audio.
-            if (!ttsStarted && audioEnabled && /[.!?]\s/.test(accumulatedText)) {
-              const firstSentenceMatch = accumulatedText.match(/^.*?[.!?](?:\s|$)/);
-              if (firstSentenceMatch) {
+            if (!ttsStarted && audioEnabled) {
+              const sentenceEnd = findFirstSentenceEnd(accumulatedText);
+              if (sentenceEnd !== -1) {
                 ttsStarted = true;
-                earlyTtsLength = firstSentenceMatch[0].length;
+                earlyTtsLength = sentenceEnd;
                 console.log('🎵 Early TTS: starting on first sentence');
-                playTextAsAudio(firstSentenceMatch[0].trim());
+                playTextAsAudio(accumulatedText.slice(0, sentenceEnd).trim());
               }
             }
           } else if (eventType === 'done') {
