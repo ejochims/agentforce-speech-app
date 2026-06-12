@@ -2,43 +2,19 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { safeStorage } from '@/lib/safeStorage';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Settings, Download, Loader2, MessageCircle, History, Plus, Send, Clock, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio, Moon, Mic, KeyboardIcon, Sparkles } from 'lucide-react';
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from '@/components/ui/drawer';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import { Loader2, MessageCircle, Plus, Send, Volume2, VolumeX, Square, ChevronDown, Pencil, Radio } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import MessageBubble from './MessageBubble';
 import MessageSkeleton from './MessageSkeleton';
-import ConversationSkeleton from './ConversationSkeleton';
 import { shouldGroupMessage, toSafeISOString, toSafeDate } from '@/lib/time';
 import AgentTransparencyPanel from './AgentTransparencyPanel';
 import AmbientOrb, { type OrbState } from './AmbientOrb';
+import AmbientGradient from './AmbientGradient';
+import ConversationHistoryDrawer from './ConversationHistoryDrawer';
+import SettingsSheet from './SettingsSheet';
+import WelcomeDialog from './WelcomeDialog';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useAudioRecorder, type SttTransparency } from '@/hooks/useAudioRecorder';
 import { useAgentStream } from '@/hooks/useAgentStream';
@@ -46,7 +22,7 @@ import { usePipelineTransparency } from '@/hooks/usePipelineTransparency';
 import { useConversation } from '@/hooks/useConversation';
 import { useWakeWord } from '@/hooks/useWakeWord';
 import VoiceRecordButton, { type VoiceRecordButtonHandle } from './VoiceRecordButton';
-import type { Conversation, Turn } from '@shared/schema';
+import type { Turn } from '@shared/schema';
 
 const agentforceLogo = '/agentforce-logo.png';
 
@@ -63,9 +39,6 @@ export default function VoiceChat() {
   const [showTransparency, setShowTransparency] = useState<boolean>(() =>
     safeStorage.getItem('showTransparency') === 'true'
   );
-  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
-  const [editingTitleValue, setEditingTitleValue] = useState('');
-  const [showVoiceHint] = useState(false); // retired — welcome state covers this
   const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
     () => safeStorage.getItem('wakeWordEnabled') === 'true'
   );
@@ -252,13 +225,11 @@ export default function VoiceChat() {
     recorder.handleRecordingStart();
   };
 
-  const saveTitle = (id: string) => {
-    const trimmed = editingTitleValue.trim();
-    const original = conversation.conversations.find((c: Conversation) => c.id === id)?.title;
-    if (trimmed && trimmed !== original) {
-      conversation.updateConversationTitle({ id, title: trimmed });
-    }
-    setEditingTitleId(null);
+  const handleSelectConversation = (id: string) => {
+    conversation.setCurrentConversationId(id);
+    safeStorage.setItem('currentConversationId', id);
+    conversation.queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+    transparency.clearEvents();
   };
 
   // ─── Ambient voice mode computed values ──────────────────────────────────
@@ -345,41 +316,7 @@ export default function VoiceChat() {
 
   return (
     <div className="app-shell relative">
-      {/* ─── Ambient radial gradient wash ─────────────────────────────────────
-          Multiple pre-coloured divs cross-fade via opacity so CSS can
-          transition them smoothly (gradients themselves can't be transitioned). */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true" style={{ zIndex: 0 }}>
-        {/* idle — blue, always subtly present */}
-        <div className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: orbState === 'idle' ? 1 : 0,
-            background: showConversation
-              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(59,130,246,0.05) 0%, transparent 100%)'
-              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(59,130,246,0.14) 0%, transparent 68%)' }} />
-        {/* recording — vivid blue */}
-        <div className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: orbState === 'recording' ? 1 : 0,
-            background: showConversation
-              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(37,99,235,0.07) 0%, transparent 100%)'
-              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(37,99,235,0.20) 0%, transparent 68%)' }} />
-        {/* processing — amber */}
-        <div className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: orbState === 'processing' ? 1 : 0,
-            background: showConversation
-              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(245,158,11,0.06) 0%, transparent 100%)'
-              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(245,158,11,0.18) 0%, transparent 68%)' }} />
-        {/* thinking — purple */}
-        <div className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: orbState === 'thinking' ? 1 : 0,
-            background: showConversation
-              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(168,85,247,0.07) 0%, transparent 100%)'
-              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(168,85,247,0.20) 0%, transparent 68%)' }} />
-        {/* speaking — emerald */}
-        <div className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: orbState === 'speaking' ? 1 : 0,
-            background: showConversation
-              ? 'radial-gradient(ellipse 120% 25% at 50% 0%, rgba(34,197,94,0.06) 0%, transparent 100%)'
-              : 'radial-gradient(ellipse 85% 60% at 50% 38%, rgba(34,197,94,0.18) 0%, transparent 68%)' }} />
-      </div>
+      <AmbientGradient orbState={orbState} showConversation={showConversation} />
 
       {/* Mobile App Header */}
       <header className="app-header" role="banner">
@@ -440,145 +377,15 @@ export default function VoiceChat() {
               {showConversation ? <MessageCircle className="w-4 h-4" /> : <Radio className="w-4 h-4" />}
             </Button>
 
-            <Drawer open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
-              <DrawerTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="rounded-full"
-                  data-testid="button-history"
-                  aria-label="View conversation history"
-                >
-                  <History className="w-4 h-4" />
-                </Button>
-              </DrawerTrigger>
-              <DrawerContent className="max-h-[85vh]">
-                <DrawerHeader className="text-center">
-                  <DrawerTitle className="text-xl font-semibold">Conversation History</DrawerTitle>
-                  <DrawerDescription className="text-muted-foreground">
-                    Your recent conversations and chat history
-                  </DrawerDescription>
-                </DrawerHeader>
-
-                <div className="px-lg pb-lg overflow-y-auto max-h-[calc(85vh-120px)]">
-                  {conversation.conversationsLoading ? (
-                    <div className="space-y-md" aria-busy="true" aria-label="Loading conversations">
-                      <ConversationSkeleton />
-                      <ConversationSkeleton />
-                      <ConversationSkeleton />
-                      <ConversationSkeleton />
-                      <ConversationSkeleton />
-                      <ConversationSkeleton />
-                    </div>
-                  ) : conversation.conversations.length === 0 ? (
-                    <div className="text-center py-xl" role="status">
-                      <History className="w-16 h-16 text-muted-foreground mx-auto mb-lg" aria-hidden="true" />
-                      <h3 className="text-xl font-semibold mb-md text-foreground">Ready to chat?</h3>
-                      <p className="text-muted-foreground mb-lg max-w-sm mx-auto leading-relaxed">
-                        Start a conversation with Agentforce using voice or text. Your chat history will appear here.
-                      </p>
-                      <Button
-                        onClick={() => setIsHistoryOpen(false)}
-                        className="rounded-full"
-                        data-testid="button-start-new-conversation"
-                        aria-label="Close history and start new conversation"
-                      >
-                        <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
-                        Start New Conversation
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-md">
-                      {conversation.conversations.map((conv: Conversation) => {
-                        const isCurrentConversation = conv.id === conversation.currentConversationId;
-                        const lastActivity = new Date(conv.createdAt);
-
-                        return (
-                          <Card
-                            key={conv.id}
-                            className={`group hover-elevate cursor-pointer transition-all duration-200 ${
-                              isCurrentConversation ? 'ring-2 ring-primary/20 border-primary/30' : ''
-                            }`}
-                            onClick={() => {
-                              if (editingTitleId === conv.id) return;
-                              if (!isCurrentConversation) {
-                                conversation.setCurrentConversationId(conv.id);
-                                safeStorage.setItem('currentConversationId', conv.id);
-                                conversation.queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-                                transparency.clearEvents();
-                              }
-                              setIsHistoryOpen(false);
-                            }}
-                            data-testid={`card-conversation-${conv.id}`}
-                          >
-                            <CardContent className="p-lg">
-                              <div className="flex items-start justify-between gap-md">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-sm mb-sm">
-                                    {editingTitleId === conv.id ? (
-                                      <input
-                                        value={editingTitleValue}
-                                        onChange={(e) => setEditingTitleValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') saveTitle(conv.id);
-                                          if (e.key === 'Escape') setEditingTitleId(null);
-                                          e.stopPropagation();
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onBlur={() => saveTitle(conv.id)}
-                                        autoFocus
-                                        className="flex-1 min-w-0 text-sm font-medium bg-transparent border-b border-primary outline-none py-0.5 text-foreground w-full"
-                                        aria-label="Edit conversation title"
-                                      />
-                                    ) : (
-                                      <>
-                                        <h4 className="font-medium text-foreground truncate flex-1 min-w-0">
-                                          {conv.title}
-                                        </h4>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingTitleId(conv.id);
-                                            setEditingTitleValue(conv.title);
-                                          }}
-                                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-muted flex-shrink-0 transition-opacity"
-                                          aria-label="Edit conversation title"
-                                          title="Rename"
-                                        >
-                                          <Pencil className="w-3 h-3 text-muted-foreground" />
-                                        </button>
-                                      </>
-                                    )}
-                                    {isCurrentConversation && (
-                                      <Badge variant="secondary" className="text-xs px-sm py-0.5 flex-shrink-0">
-                                        Current
-                                      </Badge>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-md text-xs text-muted-foreground">
-                                    <div className="flex items-center gap-xs">
-                                      <Clock className="w-3 h-3" />
-                                      <span>
-                                        {lastActivity.toLocaleDateString()} at {lastActivity.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-xs">
-                                      <MessageCircle className="w-3 h-3" />
-                                      <span>{conv.status}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </DrawerContent>
-            </Drawer>
+            <ConversationHistoryDrawer
+              open={isHistoryOpen}
+              onOpenChange={setIsHistoryOpen}
+              conversations={conversation.conversations}
+              conversationsLoading={conversation.conversationsLoading}
+              currentConversationId={conversation.currentConversationId}
+              onSelectConversation={handleSelectConversation}
+              onUpdateTitle={(id, title) => conversation.updateConversationTitle({ id, title })}
+            />
 
             <Button
               size="icon"
@@ -592,137 +399,37 @@ export default function VoiceChat() {
               <Plus className="w-4 h-4" />
             </Button>
 
-            <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="rounded-full"
-                  data-testid="button-settings"
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-80">
-                <SheetHeader>
-                  <SheetTitle>Settings</SheetTitle>
-                  <SheetDescription>
-                    Customize your voice chat experience
-                  </SheetDescription>
-                </SheetHeader>
-
-                <div className="space-y-6 mt-6">
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label htmlFor="voice-responses" className="flex flex-col space-y-1">
-                      <span className="text-sm font-medium">Voice Responses</span>
-                      <span className="text-xs text-muted-foreground">
-                        Speak agent replies aloud
-                      </span>
-                    </Label>
-                    <Switch
-                      id="voice-responses"
-                      checked={tts.audioEnabled}
-                      onCheckedChange={(checked) => {
-                        checked ? tts.initializeAudio() : tts.disableAudio();
-                      }}
-                      data-testid="toggle-voice-responses"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label htmlFor="dark-mode" className="flex flex-col space-y-1">
-                      <span className="text-sm font-medium">Dark Mode</span>
-                      <span className="text-xs text-muted-foreground">
-                        Switch to a darker colour scheme
-                      </span>
-                    </Label>
-                    <Switch
-                      id="dark-mode"
-                      checked={darkMode}
-                      onCheckedChange={(checked) => {
-                        setDarkMode(checked);
-                        safeStorage.setItem('darkMode', String(checked));
-                      }}
-                      data-testid="toggle-dark-mode"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label
-                      htmlFor="wake-word"
-                      className={`flex flex-col space-y-1 ${!wakeWordSupported ? 'opacity-50' : ''}`}
-                    >
-                      <span className="text-sm font-medium">Wake Word</span>
-                      <span className="text-xs text-muted-foreground">
-                        {wakeWordSupported
-                          ? "Say \"Hey Agentforce\" to start recording"
-                          : 'Not supported in this browser'}
-                      </span>
-                    </Label>
-                    <Switch
-                      id="wake-word"
-                      checked={wakeWordEnabled}
-                      disabled={!wakeWordSupported}
-                      onCheckedChange={(checked) => {
-                        setWakeWordEnabled(checked);
-                        safeStorage.setItem('wakeWordEnabled', String(checked));
-                      }}
-                      data-testid="toggle-wake-word"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label htmlFor="auto-listen" className="flex flex-col space-y-1">
-                      <span className="text-sm font-medium">Auto-listen</span>
-                      <span className="text-xs text-muted-foreground">
-                        Start listening after agent finishes speaking
-                      </span>
-                    </Label>
-                    <Switch
-                      id="auto-listen"
-                      checked={autoListen}
-                      onCheckedChange={(checked) => {
-                        setAutoListen(checked);
-                        safeStorage.setItem('autoListen', String(checked));
-                      }}
-                      data-testid="toggle-auto-listen"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-4">
-                    <Label htmlFor="show-transparency" className="flex flex-col space-y-1">
-                      <span className="text-sm font-medium">Agent Transparency</span>
-                      <span className="text-xs text-muted-foreground">
-                        Show pipeline timing and debug info
-                      </span>
-                    </Label>
-                    <Switch
-                      id="show-transparency"
-                      checked={showTransparency}
-                      onCheckedChange={(checked) => {
-                        setShowTransparency(checked);
-                        safeStorage.setItem('showTransparency', String(checked));
-                      }}
-                      data-testid="button-transparency"
-                    />
-                  </div>
-
-                  {conversation.turns.length > 0 && (
-                    <div className="pt-2 border-t">
-                      <Button
-                        variant="outline"
-                        className="w-full rounded-full"
-                        onClick={() => { handleExportTranscript(); setIsSettingsOpen(false); }}
-                        data-testid="button-export-transcript"
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Download Transcript
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </SheetContent>
-            </Sheet>
+            <SettingsSheet
+              open={isSettingsOpen}
+              onOpenChange={setIsSettingsOpen}
+              audioEnabled={tts.audioEnabled}
+              onAudioEnabledChange={(checked) => {
+                checked ? tts.initializeAudio() : tts.disableAudio();
+              }}
+              darkMode={darkMode}
+              onDarkModeChange={(checked) => {
+                setDarkMode(checked);
+                safeStorage.setItem('darkMode', String(checked));
+              }}
+              wakeWordEnabled={wakeWordEnabled}
+              wakeWordSupported={wakeWordSupported}
+              onWakeWordEnabledChange={(checked) => {
+                setWakeWordEnabled(checked);
+                safeStorage.setItem('wakeWordEnabled', String(checked));
+              }}
+              autoListen={autoListen}
+              onAutoListenChange={(checked) => {
+                setAutoListen(checked);
+                safeStorage.setItem('autoListen', String(checked));
+              }}
+              showTransparency={showTransparency}
+              onShowTransparencyChange={(checked) => {
+                setShowTransparency(checked);
+                safeStorage.setItem('showTransparency', String(checked));
+              }}
+              hasTurns={conversation.turns.length > 0}
+              onExportTranscript={handleExportTranscript}
+            />
           </div>
         </div>
       </header>
@@ -1189,76 +896,14 @@ export default function VoiceChat() {
       </footer>
 
       {/* Welcome Dialog — shown once to new users */}
-      <Dialog open={showWelcome} onOpenChange={(open) => {
-        if (!open) {
+      <WelcomeDialog
+        open={showWelcome}
+        onClose={() => {
           setShowWelcome(false);
           safeStorage.setItem('hasSeenWelcome', 'true');
-        }
-      }}>
-        <DialogContent className="sm:max-w-sm rounded-2xl" data-testid="dialog-welcome">
-          <DialogHeader className="text-center items-center pb-2">
-            <div className="w-16 h-16 rounded-full bg-blue-50 border border-blue-100/80 flex items-center justify-center mb-3 mx-auto">
-              <img src={agentforceLogo} alt="Agentforce" className="w-10 h-10 object-contain" />
-            </div>
-            <DialogTitle className="text-xl">Welcome to Agentforce</DialogTitle>
-            <DialogDescription className="text-sm text-center">
-              Your AI-powered voice assistant. Here's how to get started.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Mic className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Tap to talk</p>
-                <p className="text-xs text-muted-foreground">Press the mic button and speak your question</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <KeyboardIcon className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Or type instead</p>
-                <p className="text-xs text-muted-foreground">Tap the pencil icon to switch to text input</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Volume2 className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Voice responses</p>
-                <p className="text-xs text-muted-foreground">Enable voice in Settings to hear replies spoken aloud</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Sparkles className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Hands-free mode</p>
-                <p className="text-xs text-muted-foreground">Say "Hey Agentforce" to start recording — enable in Settings</p>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-2">
-            <Button
-              className="w-full rounded-full"
-              onClick={() => {
-                setShowWelcome(false);
-                safeStorage.setItem('hasSeenWelcome', 'true');
-              }}
-              data-testid="button-welcome-get-started"
-            >
-              Get Started
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        }}
+        logoSrc={agentforceLogo}
+      />
 
       {/* Agent Transparency Panel */}
       <AgentTransparencyPanel
